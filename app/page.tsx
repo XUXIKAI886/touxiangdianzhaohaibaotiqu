@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Play, Square, Image as ImageIcon, Store, Download } from 'lucide-react'
+import { Play, Square, Image as ImageIcon, Store, Download, Upload, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,14 +21,46 @@ interface LogEntry {
   type: 'info' | 'success' | 'error' | 'warning'
 }
 
+// 本地存储管理
+const STORAGE_KEY = 'meituan_store_data'
+const HISTORY_KEY = 'meituan_store_history'
+
 export default function Home() {
-  const [isMonitoring, setIsMonitoring] = useState(false)
   const [storeInfo, setStoreInfo] = useState<StoreInfo | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [avatarLoaded, setAvatarLoaded] = useState(false)
   const [headerLoaded, setHeaderLoaded] = useState(false)
   const [posterLoaded, setPosterLoaded] = useState(false)
+  const [storeHistory, setStoreHistory] = useState<StoreInfo[]>([])
   const logEndRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // 从本地存储加载数据
+  useEffect(() => {
+    const savedData = localStorage.getItem(STORAGE_KEY)
+    const savedHistory = localStorage.getItem(HISTORY_KEY)
+
+    if (savedData) {
+      try {
+        const data = JSON.parse(savedData)
+        setStoreInfo(data)
+        setAvatarLoaded(!!data.avatarUrl)
+        setHeaderLoaded(!!data.headerUrl)
+        setPosterLoaded(!!data.posterUrls && data.posterUrls.length > 0)
+        addLog('已从本地存储加载数据', 'success')
+      } catch (error) {
+        addLog('加载本地数据失败', 'error')
+      }
+    }
+
+    if (savedHistory) {
+      try {
+        setStoreHistory(JSON.parse(savedHistory))
+      } catch (error) {
+        console.error('加载历史记录失败', error)
+      }
+    }
+  }, [])
 
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
@@ -45,91 +77,131 @@ export default function Home() {
     scrollToBottom()
   }, [logs])
 
-  const toggleMonitoring = () => {
-    if (!isMonitoring) {
-      startMonitoring()
-    } else {
-      stopMonitoring()
-    }
+  // 移除美团图片URL的尺寸参数,获取原图
+  const removeSizeParams = (url: string): string => {
+    if (!url) return url
+    return url.replace(/@\d+w_\d+h_\d+e_\d+c/g, '')
   }
 
-  const startMonitoring = () => {
-    setIsMonitoring(true)
-    addLog('开始监控文件变化...', 'info')
+  // 处理JSON文件上传
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
 
-    // 开始轮询检查文件更新
-    const interval = setInterval(async () => {
+    addLog(`正在读取文件: ${file.name}`, 'info')
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
       try {
-        const response = await fetch('/api/check-update')
-        const data = await response.json()
-
-        if (data.updated) {
-          addLog('检测到文件更新,开始处理...', 'info')
-          await processStore()
-        }
+        const content = e.target?.result as string
+        const data = JSON.parse(content)
+        processJsonData(data)
       } catch (error) {
-        addLog(`监控异常: ${error}`, 'error')
+        addLog(`文件解析失败: ${error}`, 'error')
       }
-    }, 2000)
-
-    // 保存interval ID用于停止
-    ;(window as any).monitorInterval = interval
-  }
-
-  const stopMonitoring = () => {
-    setIsMonitoring(false)
-    addLog('监控已停止', 'warning')
-
-    if ((window as any).monitorInterval) {
-      clearInterval((window as any).monitorInterval)
     }
+    reader.onerror = () => {
+      addLog('文件读取失败', 'error')
+    }
+    reader.readAsText(file)
   }
 
-  const processStore = async () => {
+  // 解析JSON数据
+  const processJsonData = (data: any) => {
     try {
       // 清空旧图片
       setAvatarLoaded(false)
       setHeaderLoaded(false)
       setPosterLoaded(false)
-      addLog('清空旧图片预览', 'info')
+      addLog('开始处理店铺数据...', 'info')
 
-      const response = await fetch('/api/extract-images')
-      const data = await response.json()
+      // 提取店铺信息 (兼容两种JSON格式)
+      let poiInfo = data.data?.poi_info || {}
+      const poiBaseInfo = data.data?.poi_base_info || {}
 
-      if (data.success) {
-        setStoreInfo({
-          name: data.storeName,
-          id: data.storeId,
-          avatarUrl: data.avatarUrl,
-          headerUrl: data.headerUrl,
-          posterUrls: data.posterUrls,
-          updateTime: new Date().toLocaleString('zh-CN')
-        })
-
-        addLog(`店铺: ${data.storeName}`, 'success')
-        addLog(`ID: ${data.storeId}`, 'info')
-
-        if (data.avatarUrl) {
-          addLog('下载头像...', 'info')
-          setAvatarLoaded(true)
-        }
-
-        if (data.headerUrl) {
-          addLog('下载店招...', 'info')
-          setHeaderLoaded(true)
-        }
-
-        if (data.posterUrls && data.posterUrls.length > 0) {
-          addLog(`下载 ${data.posterUrls.length} 张海报...`, 'info')
-          setPosterLoaded(true)
-        } else {
-          addLog('该店铺暂无活动海报', 'warning')
-        }
-
-        addLog('所有图片处理完毕', 'success')
-      } else {
-        addLog(`处理失败: ${data.error}`, 'error')
+      // 优先使用poi_info,如果为空则使用poi_base_info
+      if (!poiInfo || Object.keys(poiInfo).length === 0) {
+        poiInfo = poiBaseInfo
       }
+
+      const operationList = data.data?.container_operation_source?.operation_source_list || []
+
+      const storeName = poiInfo.name || '未知店铺'
+      const storeId = poiInfo.poi_id_str || 'unknown'
+
+      // 提取头像URL
+      const avatarUrl = removeSizeParams(poiInfo.pic_url || '')
+
+      // 提取店招图片 (从content_area_info中查找)
+      let headerUrl = poiInfo.head_pic_url || ''
+      if (!headerUrl) {
+        const contentList = data.data?.content_area_info?.content_list || []
+        for (const content of contentList) {
+          if (content.content_type === 6 && content.content_title === '图片') {
+            const dataList = content.content_data_list || []
+            if (dataList.length > 0) {
+              try {
+                const picData = JSON.parse(dataList[0])
+                headerUrl = picData.pic_url || ''
+              } catch {
+                // Ignore parse errors
+              }
+            }
+            break
+          }
+        }
+      }
+      headerUrl = removeSizeParams(headerUrl)
+
+      // 提取海报 (跳过粉丝群海报)
+      const posterUrls: string[] = []
+      for (const item of operationList) {
+        const picUrl = item.pic_url || ''
+        if (picUrl && !picUrl.includes('fans_group_poster')) {
+          posterUrls.push(picUrl.split('?')[0])
+        }
+      }
+
+      const newStoreInfo: StoreInfo = {
+        name: storeName,
+        id: storeId,
+        avatarUrl: avatarUrl || undefined,
+        headerUrl: headerUrl || undefined,
+        posterUrls: posterUrls.length > 0 ? posterUrls : undefined,
+        updateTime: new Date().toLocaleString('zh-CN')
+      }
+
+      // 保存到本地存储
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newStoreInfo))
+
+      // 保存到历史记录
+      const newHistory = [newStoreInfo, ...storeHistory.filter(item => item.id !== storeId)].slice(0, 10)
+      setStoreHistory(newHistory)
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
+
+      setStoreInfo(newStoreInfo)
+
+      addLog(`店铺: ${storeName}`, 'success')
+      addLog(`ID: ${storeId}`, 'info')
+
+      if (avatarUrl) {
+        addLog('提取到店铺头像', 'info')
+        setAvatarLoaded(true)
+      }
+
+      if (headerUrl) {
+        addLog('提取到店铺店招', 'info')
+        setHeaderLoaded(true)
+      }
+
+      if (posterUrls.length > 0) {
+        addLog(`提取到 ${posterUrls.length} 张海报`, 'info')
+        setPosterLoaded(true)
+      } else {
+        addLog('该店铺暂无活动海报', 'warning')
+      }
+
+      addLog('数据处理完成!', 'success')
     } catch (error) {
       addLog(`处理失败: ${error}`, 'error')
     }
@@ -191,6 +263,34 @@ export default function Home() {
     addLog('批量下载完成!', 'success')
   }
 
+  const clearData = () => {
+    if (confirm('确定要清空当前数据吗?')) {
+      localStorage.removeItem(STORAGE_KEY)
+      setStoreInfo(null)
+      setAvatarLoaded(false)
+      setHeaderLoaded(false)
+      setPosterLoaded(false)
+      addLog('数据已清空', 'warning')
+    }
+  }
+
+  const clearHistory = () => {
+    if (confirm('确定要清空所有历史记录吗?')) {
+      localStorage.removeItem(HISTORY_KEY)
+      setStoreHistory([])
+      addLog('历史记录已清空', 'warning')
+    }
+  }
+
+  const loadHistoryItem = (item: StoreInfo) => {
+    setStoreInfo(item)
+    setAvatarLoaded(!!item.avatarUrl)
+    setHeaderLoaded(!!item.headerUrl)
+    setPosterLoaded(!!item.posterUrls && item.posterUrls.length > 0)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(item))
+    addLog(`已加载历史记录: ${item.name}`, 'success')
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-yellow-50 to-orange-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       {/* Header */}
@@ -202,11 +302,11 @@ export default function Home() {
                 <Store className="w-6 h-6 text-white" />
               </div>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-yellow-600 dark:from-orange-400 dark:to-yellow-400 bg-clip-text text-transparent">
-                美团外卖店铺图片监控
+                美团外卖店铺图片提取系统
               </h1>
             </div>
-            <Badge variant={isMonitoring ? "default" : "secondary"} className="px-4 py-1.5 rounded-full text-sm font-medium">
-              {isMonitoring ? '🟢 运行中' : '⚪ 未启动'}
+            <Badge variant="default" className="px-4 py-1.5 rounded-full text-sm font-medium">
+              💾 本地存储版
             </Badge>
           </div>
         </div>
@@ -219,28 +319,26 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="text-xl font-bold text-gray-800 dark:text-white">控制面板</CardTitle>
             <CardDescription className="text-gray-600 dark:text-gray-400">
-              监控文件: latest_poi_food.json
+              上传 Fiddler 抓取的 JSON 文件,提取店铺图片数据
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
               <Button
-                onClick={toggleMonitoring}
+                onClick={() => fileInputRef.current?.click()}
                 size="lg"
-                variant={isMonitoring ? "destructive" : "default"}
+                variant="default"
                 className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
               >
-                {isMonitoring ? (
-                  <>
-                    <Square className="w-4 h-4 mr-2" />
-                    停止监控
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 mr-2" />
-                    开始监控
-                  </>
-                )}
+                <Upload className="w-4 h-4 mr-2" />
+                上传 JSON 文件
               </Button>
               <Button
                 onClick={downloadAllImages}
@@ -251,6 +349,16 @@ export default function Home() {
               >
                 <Download className="w-4 h-4 mr-2" />
                 批量下载图片
+              </Button>
+              <Button
+                onClick={clearData}
+                size="lg"
+                variant="destructive"
+                className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
+                disabled={!storeInfo}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                清空数据
               </Button>
             </div>
           </CardContent>
@@ -272,7 +380,7 @@ export default function Home() {
               <CardContent className="space-y-3 text-gray-700 dark:text-gray-300">
                 <div className="flex items-start">
                   <span className="text-gray-500 dark:text-gray-400 font-medium min-w-[80px]">店铺名称:</span>
-                  <span className="flex-1 font-semibold">{storeInfo?.name || '等待数据...'}</span>
+                  <span className="flex-1 font-semibold">{storeInfo?.name || '等待上传数据...'}</span>
                 </div>
                 <div className="flex items-start">
                   <span className="text-gray-500 dark:text-gray-400 font-medium min-w-[80px]">店铺ID:</span>
@@ -285,13 +393,48 @@ export default function Home() {
               </CardContent>
             </Card>
 
+            {/* History */}
+            {storeHistory.length > 0 && (
+              <Card className="bg-white dark:bg-slate-900 border-orange-200 dark:border-slate-800 shadow-md">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg font-bold text-gray-800 dark:text-white">📚 历史记录</CardTitle>
+                    <Button
+                      onClick={clearHistory}
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {storeHistory.map((item, index) => (
+                      <div
+                        key={index}
+                        onClick={() => loadHistoryItem(item)}
+                        className="p-3 bg-orange-50/50 dark:bg-slate-800/50 rounded-lg cursor-pointer hover:bg-orange-100 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <div className="font-semibold text-sm text-gray-800 dark:text-white">{item.name}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          ID: {item.id} • {item.updateTime}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Logs */}
             <Card className="bg-white dark:bg-slate-900 border-orange-200 dark:border-slate-800 shadow-md">
               <CardHeader>
                 <CardTitle className="text-lg font-bold text-gray-800 dark:text-white">📋 运行日志</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-[600px] overflow-y-auto bg-gradient-to-br from-orange-50/50 to-yellow-50/50 dark:from-slate-950 dark:to-slate-900 rounded-2xl p-4 font-mono text-sm border border-orange-100 dark:border-slate-800">
+                <div className="h-[400px] overflow-y-auto bg-gradient-to-br from-orange-50/50 to-yellow-50/50 dark:from-slate-950 dark:to-slate-900 rounded-2xl p-4 font-mono text-sm border border-orange-100 dark:border-slate-800">
                   {logs.length === 0 && (
                     <div className="text-center text-gray-500 dark:text-gray-400 py-8">
                       暂无日志记录
@@ -411,6 +554,31 @@ export default function Home() {
                     )}
                   </div>
                 </div>
+
+                {/* 多张海报展示 */}
+                {posterLoaded && storeInfo?.posterUrls && storeInfo.posterUrls.length > 1 && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {storeInfo.posterUrls.slice(1).map((url, index) => (
+                      <div key={index} className="relative group">
+                        <div className="h-40 bg-gradient-to-br from-orange-50/50 to-yellow-50/50 dark:from-slate-950 dark:to-slate-900 rounded-lg flex items-center justify-center overflow-hidden border border-orange-100 dark:border-slate-800">
+                          <img
+                            src={url}
+                            alt={`海报${index + 2}`}
+                            className="w-full h-full object-contain p-1"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => downloadImage(url, `${storeInfo.name.replace(/[<>:"/\\|?*]/g, '_')}_海报${index + 2}.jpg`)}
+                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm text-orange-600 hover:text-orange-700 hover:bg-white dark:text-orange-400 dark:hover:bg-slate-800 rounded-lg h-6 w-6 p-0"
+                        >
+                          <Download className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

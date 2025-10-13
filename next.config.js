@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'export',
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'http',
@@ -16,6 +18,8 @@ const nextConfig = {
       },
     ],
   },
+  basePath: process.env.NODE_ENV === 'production' ? '/touxiangdianzhaohaibaotiqu' : '',
+  assetPrefix: process.env.NODE_ENV === 'production' ? '/touxiangdianzhaohaibaotiqu' : '',
 }
 
 module.exports = nextConfig
