@@ -1339,7 +1339,19 @@ export default function Home() {
         </div>
 
         {/* 商品图片展示区域 - 全宽底部 */}
-        {productImages.length > 0 && (
+        {productImages.length > 0 && (() => {
+          // 根据商品名称去重,保留最新的
+          const uniqueProducts = Array.from(
+            productImages.reduce((map, product) => {
+              const existing = map.get(product.name)
+              if (!existing || product.timestamp > existing.timestamp) {
+                map.set(product.name, product)
+              }
+              return map
+            }, new Map<string, ProductImage>()).values()
+          )
+
+          return (
           <Card className="mt-6 bg-white dark:bg-slate-900 border-green-200 dark:border-slate-800 shadow-lg">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1347,7 +1359,7 @@ export default function Home() {
                   <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-emerald-400 rounded-xl flex items-center justify-center mr-2">
                     <ImageIcon className="w-5 h-5 text-white" />
                   </div>
-                  商品图片 ({productImages.length})
+                  商品图片 ({uniqueProducts.length})
                 </CardTitle>
                 <Button
                   onClick={downloadAllImages}
@@ -1359,12 +1371,12 @@ export default function Home() {
                 </Button>
               </div>
               <CardDescription className="text-gray-600 dark:text-gray-400 mt-2">
-                商品图片会随着文件更新不断累积,点击批量下载可将店铺基本信息和所有商品图片保存到同一文件夹
+                商品图片会随着文件更新不断累积,已自动去重同名商品,点击批量下载可将店铺基本信息和所有商品图片保存到同一文件夹
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
-                {productImages.map((product) => (
+                {uniqueProducts.map((product) => (
                   <div key={product.id} className="relative group">
                     <div className="aspect-square bg-gradient-to-br from-green-50/50 to-emerald-50/50 dark:from-slate-950 dark:to-slate-900 rounded-md flex items-center justify-center overflow-hidden border border-green-100 dark:border-slate-800">
                       <img
