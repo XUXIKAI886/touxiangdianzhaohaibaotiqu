@@ -187,7 +187,6 @@ if(oSession.uriContains("https://wx.waimai.meituan.com/weapp/v1/poi/food")){
                   <div className="text-left">
                     <h3 className="font-semibold text-gray-800 dark:text-white mb-2">使用说明</h3>
                     <ul className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                      <li>• 配合 Fiddler 抓包工具使用,提取平台 API 返回的图片 URL</li>
                       <li>• 支持本地文件实时监控,自动提取新增店铺和商品图片</li>
                       <li>• 所有数据存储在浏览器本地,保护您的隐私安全</li>
                       <li>• 支持批量下载图片到指定文件夹</li>
