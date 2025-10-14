@@ -1,11 +1,400 @@
 'use client'
 
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Store, Construction, Home as HomeIcon } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Play, Square, Image as ImageIcon, Store, Download, Upload, Trash2, Home as HomeIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+
+interface ProductImage {
+  id: string
+  name: string
+  imageUrl: string
+  timestamp: number
+}
+
+interface LogEntry {
+  timestamp: string
+  message: string
+  type: 'info' | 'success' | 'error' | 'warning'
+}
 
 export default function ElemePage() {
+  const [productImages, setProductImages] = useState<ProductImage[]>([])
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [isMonitoring, setIsMonitoring] = useState(false)
+  const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null)
+  const [lastModified, setLastModified] = useState<number>(0)
+  const logContainerRef = useRef<HTMLDivElement>(null)
+  const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const fileHandleRef = useRef<FileSystemFileHandle | null>(null)
+  const lastModifiedRef = useRef<number>(0)
+
+  const addLog = (message: string, type: LogEntry['type'] = 'info') => {
+    const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+    setLogs(prev => [...prev, { timestamp, message, type }])
+  }
+
+  const scrollToBottom = () => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight
+    }
+  }
+
+  useEffect(() => {
+    if (logs.length > 0) {
+      scrollToBottom()
+    }
+  }, [logs])
+
+  // 将 imageHash 转换为完整的图片 URL
+  const imageHashToUrl = (imageHash: string): string => {
+    if (!imageHash || imageHash.length < 4) return ''
+    // 饿了么图片 URL 格式: https://cube.elemecdn.com/前2位/3-4位/完整hash
+    const part1 = imageHash.substring(0, 2)
+    const part2 = imageHash.substring(2, 4)
+    return `https://cube.elemecdn.com/${part1}/${part2}/${imageHash}`
+  }
+
+  // 解析饿了么商品数据
+  const processElemeProductData = (data: any) => {
+    try {
+      addLog('开始处理饿了么商品数据...', 'info')
+
+      // 饿了么的商品数据在 menu.itemGroups[].items[] 中
+      const menu = data.data?.resultMap?.menu
+      if (!menu || !menu.itemGroups) {
+        addLog('未找到商品数据结构', 'warning')
+        return
+      }
+
+      let newProductCount = 0
+      let totalProducts = 0
+
+      // 遍历所有商品分组
+      for (const itemGroup of menu.itemGroups) {
+        if (!itemGroup.items || itemGroup.items.length === 0) continue
+
+        for (const item of itemGroup.items) {
+          // 跳过非商品项 (itemType = -1 表示分类标题等)
+          if (item.itemType === -1 || !item.name || !item.imageHash) continue
+
+          const productName = item.name
+          const productId = item.itemId || item.tbItemId || Date.now().toString()
+          const imageHash = item.imageHash
+
+          // 将 imageHash 转换为完整 URL
+          const imageUrl = imageHashToUrl(imageHash)
+
+          if (imageUrl) {
+            totalProducts++
+
+            // 检查是否已存在 (根据商品名称去重)
+            const existingIndex = productImages.findIndex(p => p.name === productName)
+
+            if (existingIndex === -1) {
+              // 新商品图片
+              const newProduct: ProductImage = {
+                id: productId,
+                name: productName,
+                imageUrl: imageUrl,
+                timestamp: Date.now()
+              }
+
+              setProductImages(prev => [...prev, newProduct])
+              newProductCount++
+              addLog(`📦 新商品: ${productName}`, 'success')
+            }
+          }
+        }
+      }
+
+      addLog(`🔍 扫描了 ${totalProducts} 个商品`, 'info')
+      if (newProductCount > 0) {
+        addLog(`✅ 本次新增 ${newProductCount} 个商品图片`, 'success')
+        addLog(`📊 当前共有 ${productImages.length + newProductCount} 个商品图片`, 'info')
+      } else {
+        addLog('未发现新商品图片', 'info')
+      }
+
+    } catch (error: any) {
+      addLog(`处理商品数据失败: ${error.message}`, 'error')
+      console.error('商品数据处理错误:', error)
+    }
+  }
+
+  // 选择要监控的文件
+  const selectFileToMonitor = async () => {
+    try {
+      if (!('showOpenFilePicker' in window)) {
+        addLog('您的浏览器不支持文件系统访问API', 'error')
+        addLog('请使用 Chrome、Edge 或其他基于 Chromium 的浏览器', 'warning')
+        return
+      }
+
+      addLog('📂 请在弹出的对话框中导航到 D:\\ailun 文件夹', 'info')
+      addLog('📄 然后选择 xiaochengxueleme.txt 文件', 'info')
+
+      const [handle] = await (window as any).showOpenFilePicker({
+        types: [
+          {
+            description: 'JSON 文件 (*.txt, *.json)',
+            accept: { 'application/json': ['.json', '.txt'] },
+          },
+        ],
+        startIn: 'desktop',
+      })
+
+      setFileHandle(handle)
+      fileHandleRef.current = handle
+      addLog(`✅ 已选择文件: ${handle.name}`, 'success')
+      addLog('📌 提示: 浏览器会记住此位置,下次打开会更快', 'info')
+
+      // 读取一次文件内容
+      const file = await handle.getFile()
+      const initialModified = file.lastModified
+      setLastModified(initialModified)
+      lastModifiedRef.current = initialModified
+
+      const content = await file.text()
+      const data = JSON.parse(content)
+      processElemeProductData(data)
+
+      // 自动开始监控
+      addLog('🚀 自动开始监控文件变化...', 'success')
+      setIsMonitoring(true)
+
+      const interval = setInterval(() => {
+        checkFileUpdate()
+      }, 2000)
+      monitorIntervalRef.current = interval
+
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        addLog('❌ 已取消文件选择', 'warning')
+      } else {
+        addLog(`❌ 选择文件失败: ${error.message}`, 'error')
+      }
+    }
+  }
+
+  // 检查文件是否更新
+  const checkFileUpdate = async () => {
+    const handle = fileHandleRef.current
+    const lastMod = lastModifiedRef.current
+
+    if (!handle) return
+
+    try {
+      const file = await handle.getFile()
+      const currentModified = file.lastModified
+
+      if (currentModified > lastMod) {
+        addLog('🔄 检测到文件更新!', 'success')
+        addLog(`文件修改时间: ${new Date(currentModified).toLocaleString('zh-CN')}`, 'info')
+
+        setLastModified(currentModified)
+        lastModifiedRef.current = currentModified
+
+        const content = await file.text()
+        const data = JSON.parse(content)
+        processElemeProductData(data)
+      }
+    } catch (error: any) {
+      addLog(`读取文件失败: ${error.message}`, 'error')
+      stopMonitoring()
+    }
+  }
+
+  // 停止监控
+  const stopMonitoring = () => {
+    if (monitorIntervalRef.current) {
+      clearInterval(monitorIntervalRef.current)
+      monitorIntervalRef.current = null
+    }
+    setIsMonitoring(false)
+    addLog('已停止监控', 'warning')
+  }
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      if (monitorIntervalRef.current) {
+        clearInterval(monitorIntervalRef.current)
+      }
+    }
+  }, [])
+
+  // 清空商品数据
+  const clearProductData = () => {
+    if (confirm('确定要清空所有商品图片吗?')) {
+      setProductImages([])
+      addLog('商品数据已清空', 'warning')
+    }
+  }
+
+  const getLogColor = (type: LogEntry['type']) => {
+    switch (type) {
+      case 'success': return 'text-green-600 dark:text-green-400'
+      case 'error': return 'text-red-600 dark:text-red-400'
+      case 'warning': return 'text-yellow-700 dark:text-yellow-400'
+      default: return 'text-gray-700 dark:text-gray-300'
+    }
+  }
+
+  // 通过 canvas 获取图片 Blob (绕过 CORS)
+  const fetchImageAsBlob = async (url: string): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
+
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('无法创建 canvas context'))
+            return
+          }
+
+          ctx.drawImage(img, 0, 0)
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob)
+              } else {
+                reject(new Error('无法转换为 Blob'))
+              }
+            },
+            'image/jpeg',
+            0.95
+          )
+        } catch (error) {
+          reject(error)
+        }
+      }
+
+      img.onerror = () => {
+        reject(new Error('图片加载失败'))
+      }
+
+      img.src = url.includes('?') ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`
+    })
+  }
+
+  // 下载图片到指定文件夹
+  const downloadImageToFolder = async (url: string, filename: string, dirHandle: any): Promise<boolean> => {
+    try {
+      addLog(`下载中: ${filename}`, 'info')
+
+      const blob = await fetchImageAsBlob(url)
+
+      const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
+      const writable = await fileHandle.createWritable()
+
+      await writable.write(blob)
+      await writable.close()
+
+      addLog(`✅ 已保存: ${filename}`, 'success')
+      return true
+    } catch (error: any) {
+      addLog(`❌ 下载失败: ${filename} - ${error.message}`, 'error')
+      return false
+    }
+  }
+
+  // 批量下载所有图片
+  const downloadAllImages = async () => {
+    if (productImages.length === 0) {
+      addLog('没有可下载的图片', 'warning')
+      return
+    }
+
+    try {
+      if (!('showDirectoryPicker' in window)) {
+        addLog('您的浏览器不支持文件夹选择功能', 'error')
+        addLog('请使用 Chrome 86+ 或 Edge 86+ 浏览器', 'warning')
+        return
+      }
+
+      addLog('📁 请选择图片保存的文件夹...', 'info')
+
+      const dirHandle = await (window as any).showDirectoryPicker({
+        mode: 'readwrite',
+        startIn: 'downloads',
+      })
+
+      addLog(`✅ 已选择文件夹: ${dirHandle.name}`, 'success')
+      addLog('开始批量下载图片...', 'info')
+
+      let downloadCount = 0
+
+      // 根据商品名称去重
+      const uniqueProducts = Array.from(
+        productImages.reduce((map, product) => {
+          const existing = map.get(product.name)
+          if (!existing || product.timestamp > existing.timestamp) {
+            map.set(product.name, product)
+          }
+          return map
+        }, new Map<string, ProductImage>()).values()
+      )
+
+      for (const product of uniqueProducts) {
+        const safeName = product.name.replace(/[<>:"/\\|?*]/g, '_')
+        const filename = `${safeName}.jpg`
+        const success = await downloadImageToFolder(product.imageUrl, filename, dirHandle)
+        if (success) downloadCount++
+      }
+
+      addLog(`✅ 批量下载完成! 共保存 ${downloadCount} 张图片到文件夹: ${dirHandle.name}`, 'success')
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        addLog('❌ 已取消文件夹选择', 'warning')
+      } else {
+        addLog(`❌ 批量下载失败: ${error.message}`, 'error')
+      }
+    }
+  }
+
+  // 单个图片下载
+  const downloadImage = async (url: string, filename: string) => {
+    try {
+      addLog(`开始下载: ${filename}`, 'info')
+
+      const blob = await fetchImageAsBlob(url)
+      const blobUrl = window.URL.createObjectURL(blob)
+
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      window.URL.revokeObjectURL(blobUrl)
+      addLog(`下载成功: ${filename}`, 'success')
+    } catch (error: any) {
+      addLog(`下载失败: ${filename} - ${error.message}`, 'error')
+    }
+  }
+
+  // 根据商品名称去重
+  const uniqueProducts = Array.from(
+    productImages.reduce((map, product) => {
+      const existing = map.get(product.name)
+      if (!existing || product.timestamp > existing.timestamp) {
+        map.set(product.name, product)
+      }
+      return map
+    }, new Map<string, ProductImage>()).values()
+  )
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       {/* Header */}
@@ -20,151 +409,276 @@ export default function ElemePage() {
                 饿了么店铺图片提取系统
               </h1>
             </div>
-            <Link href="/">
-              <Button variant="outline" className="rounded-xl">
-                <HomeIcon className="w-4 h-4 mr-2" />
-                返回主页
-              </Button>
-            </Link>
+            <div className="flex items-center space-x-3">
+              <Badge
+                variant={isMonitoring ? "default" : "secondary"}
+                className="px-4 py-1.5 rounded-full text-sm font-medium"
+              >
+                {isMonitoring ? '🟢 监控中' : '⭕ 未监控'}
+              </Badge>
+              <Link href="/">
+                <Button variant="outline" className="rounded-xl">
+                  <HomeIcon className="w-4 h-4 mr-2" />
+                  返回主页
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-12">
-        <div className="max-w-3xl mx-auto">
-          <Card className="bg-white dark:bg-slate-900 border-blue-200 dark:border-slate-800 shadow-xl">
-            <CardHeader className="text-center pb-8">
-              <div className="flex justify-center mb-6">
-                <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900 dark:to-cyan-900 rounded-3xl flex items-center justify-center">
-                  <Construction className="w-14 h-14 text-blue-500 dark:text-blue-400" />
-                </div>
-              </div>
-              <CardTitle className="text-3xl font-bold text-gray-800 dark:text-white mb-3">
-                功能开发中
-              </CardTitle>
-              <CardDescription className="text-lg text-gray-600 dark:text-gray-400">
-                饿了么店铺图片提取功能正在火热开发中,敬请期待!
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {/* 计划功能列表 */}
-                <div className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 rounded-xl p-6">
-                  <h3 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center">
-                    <span className="text-xl mr-2">🎯</span>
-                    计划支持的功能
-                  </h3>
-                  <ul className="space-y-3">
-                    <li className="flex items-start space-x-3">
-                      <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold mt-0.5">
-                        1
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 dark:text-white">店铺基本信息提取</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                          提取饿了么店铺的头像、店招、海报等基本信息图片
-                        </p>
-                      </div>
-                    </li>
-                    <li className="flex items-start space-x-3">
-                      <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold mt-0.5">
-                        2
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 dark:text-white">商品图片批量提取</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                          支持批量提取店铺商品主图,自动去重同名商品
-                        </p>
-                      </div>
-                    </li>
-                    <li className="flex items-start space-x-3">
-                      <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold mt-0.5">
-                        3
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 dark:text-white">文件实时监控</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                          配合 Fiddler 抓包,实时监控本地 JSON 文件变化
-                        </p>
-                      </div>
-                    </li>
-                    <li className="flex items-start space-x-3">
-                      <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold mt-0.5">
-                        4
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 dark:text-white">批量下载功能</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                          一键下载所有提取的图片到指定文件夹
-                        </p>
-                      </div>
-                    </li>
-                  </ul>
-                </div>
-
-                {/* 开发进度 */}
-                <div className="bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-slate-800 dark:to-slate-700 rounded-xl p-6">
-                  <h3 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center">
-                    <span className="text-xl mr-2">📅</span>
-                    开发进度
-                  </h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700 dark:text-gray-300">数据结构分析</span>
-                      <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">待开始</span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div className="bg-gradient-to-r from-blue-500 to-cyan-500 h-2 rounded-full" style={{width: '0%'}}></div>
+      <main className="container mx-auto px-4 py-6">
+        {/* Control Panel */}
+        <Card className="mb-6 bg-white dark:bg-slate-900 border-blue-200 dark:border-slate-800 shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-xl font-bold text-gray-800 dark:text-white">控制面板</CardTitle>
+            <CardDescription className="text-gray-600 dark:text-gray-400">
+              选择饿了么商品文件,系统将自动检测文件变化并提取商品图片
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              {/* 路径提示 */}
+              {!fileHandle && (
+                <div className="p-3 bg-cyan-50 dark:bg-cyan-950 border-l-4 border-cyan-500 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">💡</span>
+                    <div className="flex-1 text-sm">
+                      <p className="font-semibold text-cyan-800 dark:text-cyan-200 mb-1">
+                        快速选择提示
+                      </p>
+                      <p className="text-cyan-700 dark:text-cyan-300">
+                        点击"选择监控文件"后,在弹出的对话框中:
+                      </p>
+                      <ol className="mt-2 space-y-1 text-cyan-700 dark:text-cyan-300 list-decimal list-inside">
+                        <li>在地址栏输入: <code className="px-2 py-0.5 bg-cyan-100 dark:bg-cyan-900 rounded font-mono text-xs">D:\ailun</code></li>
+                        <li>按 Enter 键快速跳转到该文件夹</li>
+                        <li>选择 <code className="px-2 py-0.5 bg-cyan-100 dark:bg-cyan-900 rounded font-mono text-xs">xiaochengxueleme.txt</code> 文件</li>
+                        <li>浏览器会记住此位置,下次更快!</li>
+                      </ol>
                     </div>
                   </div>
                 </div>
+              )}
 
-                {/* 行动按钮 */}
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                  <Link href="/" className="flex-1">
-                    <Button
-                      variant="outline"
-                      className="w-full rounded-xl border-2 border-blue-300 hover:bg-blue-50 dark:border-blue-600 dark:hover:bg-blue-950 transition-all"
-                    >
-                      <ArrowLeft className="w-4 h-4 mr-2" />
-                      返回首页
-                    </Button>
-                  </Link>
-                  <Link href="/meituan" className="flex-1">
-                    <Button
-                      className="w-full rounded-xl bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600"
-                    >
-                      <Store className="w-4 h-4 mr-2" />
-                      使用美团系统
-                    </Button>
-                  </Link>
+              {/* 商品信息监控 */}
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-blue-200 dark:border-slate-600">
+                <div className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-3">🛒 饿了么商品信息</div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3">
+                    {!isMonitoring ? (
+                      <Button
+                        onClick={selectFileToMonitor}
+                        size="lg"
+                        variant="default"
+                        className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {fileHandle ? '重新选择文件' : '选择监控文件'}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={stopMonitoring}
+                        size="lg"
+                        variant="destructive"
+                        className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
+                      >
+                        <Square className="w-4 h-4 mr-2" />
+                        停止监控
+                      </Button>
+                    )}
+                    {fileHandle && (
+                      <div className="flex items-center px-3 py-2 bg-white dark:bg-slate-900 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+                        <span className="font-medium">当前文件:</span>
+                        <span className="ml-2 text-blue-600 dark:text-blue-400">{fileHandle.name}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {fileHandle && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={downloadAllImages}
+                        size="lg"
+                        variant="outline"
+                        className="rounded-xl border-2 border-blue-300 hover:bg-blue-50 dark:border-blue-600 dark:hover:bg-blue-950 transition-all font-semibold"
+                        disabled={productImages.length === 0}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        批量下载全部
+                      </Button>
+                      <Button
+                        onClick={clearProductData}
+                        size="lg"
+                        variant="outline"
+                        className="rounded-xl border-2 border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-900 transition-all font-semibold"
+                        disabled={productImages.length === 0}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        清空数据
+                      </Button>
+                    </div>
+                  )}
                 </div>
+              </div>
+
+              {/* 商品统计信息 */}
+              {productImages.length > 0 && (
+                <div className="p-3 bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-slate-800 dark:to-slate-700 rounded-lg border border-cyan-200 dark:border-slate-600">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-cyan-800 dark:text-cyan-200">📊 当前商品总数:</span>
+                      <Badge variant="outline" className="text-lg px-3 py-1 bg-white dark:bg-slate-900">
+                        {uniqueProducts.length} 个 (已去重)
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Logs */}
+          <Card className="bg-white dark:bg-slate-900 border-blue-200 dark:border-slate-800 shadow-md">
+            <CardHeader>
+              <CardTitle className="text-lg font-bold text-gray-800 dark:text-white">📋 运行日志</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div
+                ref={logContainerRef}
+                className="h-[500px] overflow-y-auto bg-gradient-to-br from-blue-50/50 to-cyan-50/50 dark:from-slate-950 dark:to-slate-900 rounded-2xl p-4 font-mono text-sm border border-blue-100 dark:border-slate-800"
+              >
+                {logs.length === 0 && (
+                  <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+                    暂无日志记录
+                  </div>
+                )}
+                {logs.map((log, index) => (
+                  <div key={index} className={`${getLogColor(log.type)} mb-1 hover:bg-blue-100/30 dark:hover:bg-slate-800/30 px-2 py-0.5 rounded transition-colors`}>
+                    <span className="text-gray-600 dark:text-gray-400">[{log.timestamp}]</span> {log.message}
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* 提示卡片 */}
-          <Card className="mt-8 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-900 dark:to-slate-800 border-blue-200 dark:border-slate-700">
-            <CardContent className="py-6">
-              <div className="flex items-start space-x-3">
-                <div className="text-2xl">💡</div>
-                <div>
-                  <h3 className="font-semibold text-gray-800 dark:text-white mb-2">开发计划</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    饿了么系统的功能将参考美团系统的架构设计,提供相同的用户体验。
-                    如果您需要立即使用类似功能,可以先使用美团外卖图片提取系统。
-                  </p>
+          {/* Image Preview */}
+          <Card className="bg-white dark:bg-slate-900 border-blue-200 dark:border-slate-800 shadow-md">
+            <CardHeader>
+              <CardTitle className="text-lg font-bold text-gray-800 dark:text-white flex items-center">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-xl flex items-center justify-center mr-2">
+                  <ImageIcon className="w-5 h-5 text-white" />
                 </div>
+                商品图片预览 ({uniqueProducts.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[500px] overflow-y-auto">
+                {uniqueProducts.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600">
+                    暂无商品图片
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {uniqueProducts.map((product) => (
+                      <div key={product.id} className="relative group">
+                        <div className="aspect-square bg-gradient-to-br from-blue-50/50 to-cyan-50/50 dark:from-slate-950 dark:to-slate-900 rounded-lg flex items-center justify-center overflow-hidden border border-blue-100 dark:border-slate-800">
+                          <img
+                            src={product.imageUrl}
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="mt-1 px-0.5">
+                          <p className="text-xs text-gray-700 dark:text-gray-300 font-medium truncate" title={product.name}>
+                            {product.name}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            const safeName = product.name.replace(/[<>:"/\\|?*]/g, '_')
+                            downloadImage(product.imageUrl, `${safeName}.jpg`)
+                          }}
+                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm text-blue-600 hover:text-blue-700 hover:bg-white dark:text-blue-400 dark:hover:bg-slate-800 rounded-md h-6 w-6 p-0"
+                        >
+                          <Download className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* 商品图片展示区域 - 全宽底部 */}
+        {productImages.length > 0 && (
+          <Card className="mt-6 bg-white dark:bg-slate-900 border-blue-200 dark:border-slate-800 shadow-lg">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xl font-bold text-gray-800 dark:text-white flex items-center">
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-xl flex items-center justify-center mr-2">
+                    <ImageIcon className="w-5 h-5 text-white" />
+                  </div>
+                  商品图片 ({uniqueProducts.length})
+                </CardTitle>
+                <Button
+                  onClick={downloadAllImages}
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  批量下载所有图片
+                </Button>
+              </div>
+              <CardDescription className="text-gray-600 dark:text-gray-400 mt-2">
+                商品图片会随着文件更新不断累积,已自动根据商品名称去重
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
+                {uniqueProducts.map((product) => (
+                  <div key={product.id} className="relative group">
+                    <div className="aspect-square bg-gradient-to-br from-blue-50/50 to-cyan-50/50 dark:from-slate-950 dark:to-slate-900 rounded-md flex items-center justify-center overflow-hidden border border-blue-100 dark:border-slate-800">
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="mt-1 px-0.5">
+                      <p className="text-[10px] text-gray-700 dark:text-gray-300 font-medium truncate" title={product.name}>
+                        {product.name}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const safeName = product.name.replace(/[<>:"/\\|?*]/g, '_')
+                        downloadImage(product.imageUrl, `${safeName}.jpg`)
+                      }}
+                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm text-blue-600 hover:text-blue-700 hover:bg-white dark:text-blue-400 dark:hover:bg-slate-800 rounded-md h-6 w-6 p-0"
+                    >
+                      <Download className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </main>
 
       {/* Footer */}
       <footer className="mt-16 pb-8 text-center text-gray-500 dark:text-gray-400 text-sm">
-        <p>饿了么店铺图片提取系统 - 开发中</p>
+        <p>饿了么店铺图片提取系统 v1.0</p>
         <p className="mt-2">🤖 Generated with Claude Code</p>
       </footer>
     </div>
