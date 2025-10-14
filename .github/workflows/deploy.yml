@@ -38,6 +38,7 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          GITHUB_PAGES: true
 
       - name: 上传构建产物
         uses: actions/upload-pages-artifact@v3

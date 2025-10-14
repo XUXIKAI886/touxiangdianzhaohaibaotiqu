@@ -19,9 +19,10 @@ const nextConfig = {
       },
     ],
   },
-  // GitHub Pages 部署时需要 basePath
-  basePath: process.env.NODE_ENV === 'production' ? '/touxiangdianzhaohaibaotiqu' : '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/touxiangdianzhaohaibaotiqu' : '',
+  // 只有 GitHub Pages 部署时才使用 basePath
+  // Vercel 部署在根路径,不需要 basePath
+  basePath: process.env.GITHUB_PAGES === 'true' ? '/touxiangdianzhaohaibaotiqu' : '',
+  assetPrefix: process.env.GITHUB_PAGES === 'true' ? '/touxiangdianzhaohaibaotiqu' : '',
 }
 
 module.exports = nextConfig
