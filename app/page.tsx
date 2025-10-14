@@ -57,6 +57,14 @@ export default function Home() {
   const lastProductModifiedRef = useRef<number>(0)
   const productMonitorIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  // 第二个商品监控相关状态
+  const [isMonitoringProduct2, setIsMonitoringProduct2] = useState(false)
+  const [productFileHandle2, setProductFileHandle2] = useState<FileSystemFileHandle | null>(null)
+  const [lastProductModified2, setLastProductModified2] = useState<number>(0)
+  const productFileHandleRef2 = useRef<FileSystemFileHandle | null>(null)
+  const lastProductModifiedRef2 = useRef<number>(0)
+  const productMonitorIntervalRef2 = useRef<NodeJS.Timeout | null>(null)
+
   // 从本地存储加载数据
   useEffect(() => {
     const savedData = localStorage.getItem(STORAGE_KEY)
@@ -347,6 +355,9 @@ export default function Home() {
       if (productMonitorIntervalRef.current) {
         clearInterval(productMonitorIntervalRef.current)
       }
+      if (productMonitorIntervalRef2.current) {
+        clearInterval(productMonitorIntervalRef2.current)
+      }
     }
   }, [])
 
@@ -439,45 +450,54 @@ export default function Home() {
     try {
       addLog('开始处理商品数据...', 'info')
 
-      // 提取商品列表
-      const spuList = data.data?.product?.spu_list || data.data?.spu_list || []
+      // 从 food_spu_tags 中提取所有 dynamic_spus
+      const foodSpuTags = data.data?.food_spu_tags || []
 
-      if (spuList.length === 0) {
-        addLog('未找到商品数据', 'warning')
+      if (foodSpuTags.length === 0) {
+        addLog('未找到商品标签数据', 'warning')
         return
       }
 
       let newProductCount = 0
+      let totalProducts = 0
 
-      for (const spu of spuList) {
-        const productName = spu.spu_name || spu.name || '未知商品'
-        const productId = spu.spu_id?.toString() || spu.id?.toString() || Date.now().toString()
+      // 遍历所有商品标签
+      for (const tag of foodSpuTags) {
+        const dynamicSpus = tag.dynamic_spus || []
+        totalProducts += dynamicSpus.length
 
-        // 提取商品主图
-        const mainPic = spu.min_spu_pic || spu.picture || spu.pic_url || ''
+        for (const spu of dynamicSpus) {
+          const productName = spu.name || '未知商品'
+          const productId = spu.id?.toString() || Date.now().toString()
 
-        if (mainPic) {
-          const imageUrl = removeSizeParams(mainPic)
+          // 提取商品主图
+          const mainPic = spu.picture || ''
 
-          // 检查是否已存在(根据 ID 去重)
-          const existingIndex = productImages.findIndex(p => p.id === productId)
+          if (mainPic) {
+            // 移除图片尺寸参数,获取原图
+            const imageUrl = removeSizeParams(mainPic)
 
-          if (existingIndex === -1) {
-            // 新商品图片
-            const newProduct: ProductImage = {
-              id: productId,
-              name: productName,
-              imageUrl: imageUrl,
-              timestamp: Date.now()
+            // 检查是否已存在(根据 ID 去重)
+            const existingIndex = productImages.findIndex(p => p.id === productId)
+
+            if (existingIndex === -1) {
+              // 新商品图片
+              const newProduct: ProductImage = {
+                id: productId,
+                name: productName,
+                imageUrl: imageUrl,
+                timestamp: Date.now()
+              }
+
+              setProductImages(prev => [...prev, newProduct])
+              newProductCount++
+              addLog(`📦 新商品: ${productName}`, 'success')
             }
-
-            setProductImages(prev => [...prev, newProduct])
-            newProductCount++
-            addLog(`📦 新商品: ${productName}`, 'success')
           }
         }
       }
 
+      addLog(`🔍 扫描了 ${totalProducts} 个商品`, 'info')
       if (newProductCount > 0) {
         addLog(`✅ 本次新增 ${newProductCount} 个商品图片`, 'success')
         addLog(`📊 当前共有 ${productImages.length + newProductCount} 个商品图片`, 'info')
@@ -487,6 +507,7 @@ export default function Home() {
 
     } catch (error: any) {
       addLog(`处理商品数据失败: ${error.message}`, 'error')
+      console.error('商品数据处理错误:', error)
     }
   }
 
@@ -497,7 +518,101 @@ export default function Home() {
       productMonitorIntervalRef.current = null
     }
     setIsMonitoringProduct(false)
-    addLog('已停止商品监控', 'warning')
+    addLog('已停止商品文件1监控', 'warning')
+  }
+
+  // ========== 第二个商品监控相关函数 ==========
+
+  // 选择第二个商品监控文件
+  const selectProductFile2ToMonitor = async () => {
+    try {
+      if (!('showOpenFilePicker' in window)) {
+        addLog('您的浏览器不支持文件系统访问API', 'error')
+        return
+      }
+
+      addLog('📂 请选择第二个商品文件: xiaochengxumeituan01.txt', 'info')
+
+      const [handle] = await (window as any).showOpenFilePicker({
+        types: [{
+          description: 'JSON 文件 (*.txt, *.json)',
+          accept: { 'application/json': ['.json', '.txt'] },
+        }],
+        startIn: 'desktop',
+      })
+
+      setProductFileHandle2(handle)
+      productFileHandleRef2.current = handle
+      addLog(`✅ 已选择第二个商品文件: ${handle.name}`, 'success')
+
+      // 读取一次文件并处理
+      const file = await handle.getFile()
+      const initialModified = file.lastModified
+      setLastProductModified2(initialModified)
+      lastProductModifiedRef2.current = initialModified
+
+      const content = await file.text()
+      const data = JSON.parse(content)
+      processProductData(data)
+
+      // 自动开始监控
+      addLog('🚀 自动开始监控第二个商品文件变化...', 'success')
+      setIsMonitoringProduct2(true)
+
+      const interval = setInterval(() => {
+        checkProductFile2Update()
+      }, 2000)
+      productMonitorIntervalRef2.current = interval
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        addLog('❌ 已取消第二个商品文件选择', 'warning')
+      } else {
+        addLog(`❌ 选择第二个商品文件失败: ${error.message}`, 'error')
+      }
+    }
+  }
+
+  // 检查第二个商品文件更新
+  const checkProductFile2Update = async () => {
+    const handle = productFileHandleRef2.current
+    const lastMod = lastProductModifiedRef2.current
+
+    if (!handle) return
+
+    try {
+      const file = await handle.getFile()
+      const currentModified = file.lastModified
+
+      console.log('🔍 检查第二个商品文件更新:', {
+        当前修改时间: new Date(currentModified).toLocaleString(),
+        上次修改时间: new Date(lastMod).toLocaleString(),
+        是否更新: currentModified > lastMod
+      })
+
+      if (currentModified > lastMod) {
+        addLog('🔄 检测到第二个商品文件更新!', 'success')
+
+        setLastProductModified2(currentModified)
+        lastProductModifiedRef2.current = currentModified
+
+        const content = await file.text()
+        const data = JSON.parse(content)
+        processProductData(data)
+      }
+    } catch (error: any) {
+      addLog(`读取第二个商品文件失败: ${error.message}`, 'error')
+      stopProductMonitoring2()
+    }
+  }
+
+  // 停止第二个商品监控
+  const stopProductMonitoring2 = () => {
+    if (productMonitorIntervalRef2.current) {
+      clearInterval(productMonitorIntervalRef2.current)
+      productMonitorIntervalRef2.current = null
+    }
+    setIsMonitoringProduct2(false)
+    addLog('已停止商品文件2监控', 'warning')
   }
 
   // 清空商品数据
@@ -855,9 +970,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 商品信息监控 */}
+              {/* 商品信息监控 1 */}
               <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-green-200 dark:border-slate-600">
-                <div className="text-sm font-semibold text-green-800 dark:text-green-200 mb-3">🛒 商品信息监控</div>
+                <div className="text-sm font-semibold text-green-800 dark:text-green-200 mb-3">🛒 商品信息监控 1</div>
 
                 {/* 商品文件路径提示 */}
                 {!productFileHandle && (
@@ -869,7 +984,7 @@ export default function Home() {
                           商品文件选择提示
                         </p>
                         <p className="text-green-700 dark:text-green-300">
-                          点击"选择商品文件"后,在弹出的对话框中:
+                          点击"选择商品文件1"后,在弹出的对话框中:
                         </p>
                         <ol className="mt-2 space-y-1 text-green-700 dark:text-green-300 list-decimal list-inside">
                           <li>在地址栏输入: <code className="px-2 py-0.5 bg-green-200 dark:bg-green-900 rounded font-mono text-xs">D:\ailun</code></li>
@@ -883,7 +998,6 @@ export default function Home() {
                 )}
 
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     {!isMonitoringProduct ? (
                       <Button
@@ -893,7 +1007,7 @@ export default function Home() {
                         className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold bg-green-600 hover:bg-green-700"
                       >
                         <Upload className="w-4 h-4 mr-2" />
-                        {productFileHandle ? '重新选择商品文件' : '选择商品文件'}
+                        {productFileHandle ? '重新选择商品文件1' : '选择商品文件1'}
                       </Button>
                     ) : (
                       <Button
@@ -903,37 +1017,101 @@ export default function Home() {
                         className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
                       >
                         <Square className="w-4 h-4 mr-2" />
-                        停止商品监控
+                        停止文件1监控
                       </Button>
                     )}
                     {productFileHandle && (
                       <div className="flex items-center px-3 py-2 bg-white dark:bg-slate-900 rounded-lg text-sm text-gray-700 dark:text-gray-300">
-                        <span className="font-medium">商品文件:</span>
+                        <span className="font-medium">文件1:</span>
                         <span className="ml-2 text-green-600 dark:text-green-400">{productFileHandle.name}</span>
                       </div>
                     )}
                   </div>
-
-                  {productFileHandle && (
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline" className="px-3 py-1">
-                        {productImages.length} 个商品
-                      </Badge>
-                      {productImages.length > 0 && (
-                        <Button
-                          onClick={clearProductData}
-                          size="sm"
-                          variant="outline"
-                          className="rounded-lg"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 mr-1" />
-                          清空商品
-                        </Button>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
+
+              {/* 商品信息监控 2 */}
+              <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-purple-200 dark:border-slate-600">
+                <div className="text-sm font-semibold text-purple-800 dark:text-purple-200 mb-3">🛒 商品信息监控 2 (实时更新)</div>
+
+                {/* 商品文件路径提示 */}
+                {!productFileHandle2 && (
+                  <div className="mb-3 p-3 bg-purple-100 dark:bg-purple-950 border-l-4 border-purple-500 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <span className="text-lg">💡</span>
+                      <div className="flex-1 text-sm">
+                        <p className="font-semibold text-purple-800 dark:text-purple-200 mb-1">
+                          第二个商品文件选择提示
+                        </p>
+                        <p className="text-purple-700 dark:text-purple-300">
+                          点击"选择商品文件2"后,在弹出的对话框中:
+                        </p>
+                        <ol className="mt-2 space-y-1 text-purple-700 dark:text-purple-300 list-decimal list-inside">
+                          <li>在地址栏输入: <code className="px-2 py-0.5 bg-purple-200 dark:bg-purple-900 rounded font-mono text-xs">D:\ailun</code></li>
+                          <li>按 Enter 键快速跳转到该文件夹</li>
+                          <li>选择 <code className="px-2 py-0.5 bg-purple-200 dark:bg-purple-900 rounded font-mono text-xs">xiaochengxumeituan01.txt</code> 文件</li>
+                          <li>此文件会实时更新,商品图片会持续累积显示</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {!isMonitoringProduct2 ? (
+                      <Button
+                        onClick={selectProductFile2ToMonitor}
+                        size="lg"
+                        variant="default"
+                        className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold bg-purple-600 hover:bg-purple-700"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {productFileHandle2 ? '重新选择商品文件2' : '选择商品文件2'}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={stopProductMonitoring2}
+                        size="lg"
+                        variant="destructive"
+                        className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
+                      >
+                        <Square className="w-4 h-4 mr-2" />
+                        停止文件2监控
+                      </Button>
+                    )}
+                    {productFileHandle2 && (
+                      <div className="flex items-center px-3 py-2 bg-white dark:bg-slate-900 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+                        <span className="font-medium">文件2:</span>
+                        <span className="ml-2 text-purple-600 dark:text-purple-400">{productFileHandle2.name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 商品统计信息 */}
+              {productImages.length > 0 && (
+                <div className="p-3 bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-slate-800 dark:to-slate-700 rounded-lg border border-cyan-200 dark:border-slate-600">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-cyan-800 dark:text-cyan-200">📊 当前商品总数:</span>
+                      <Badge variant="outline" className="text-lg px-3 py-1 bg-white dark:bg-slate-900">
+                        {productImages.length} 个
+                      </Badge>
+                    </div>
+                    <Button
+                      onClick={clearProductData}
+                      size="sm"
+                      variant="outline"
+                      className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-950"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1" />
+                      清空所有商品
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1185,18 +1363,18 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
                 {productImages.map((product) => (
                   <div key={product.id} className="relative group">
-                    <div className="aspect-square bg-gradient-to-br from-green-50/50 to-emerald-50/50 dark:from-slate-950 dark:to-slate-900 rounded-lg flex items-center justify-center overflow-hidden border-2 border-green-100 dark:border-slate-800">
+                    <div className="aspect-square bg-gradient-to-br from-green-50/50 to-emerald-50/50 dark:from-slate-950 dark:to-slate-900 rounded-md flex items-center justify-center overflow-hidden border border-green-100 dark:border-slate-800">
                       <img
                         src={product.imageUrl}
                         alt={product.name}
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    <div className="mt-2 px-1">
-                      <p className="text-xs text-gray-700 dark:text-gray-300 font-medium truncate" title={product.name}>
+                    <div className="mt-1 px-0.5">
+                      <p className="text-[10px] text-gray-700 dark:text-gray-300 font-medium truncate" title={product.name}>
                         {product.name}
                       </p>
                     </div>
@@ -1207,9 +1385,9 @@ export default function Home() {
                         const safeName = product.name.replace(/[<>:"/\\|?*]/g, '_')
                         downloadImage(product.imageUrl, `${safeName}.jpg`)
                       }}
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm text-green-600 hover:text-green-700 hover:bg-white dark:text-green-400 dark:hover:bg-slate-800 rounded-lg h-7 w-7 p-0"
+                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm text-green-600 hover:text-green-700 hover:bg-white dark:text-green-400 dark:hover:bg-slate-800 rounded-md h-6 w-6 p-0"
                     >
-                      <Download className="w-3.5 h-3.5" />
+                      <Download className="w-3 h-3" />
                     </Button>
                   </div>
                 ))}
