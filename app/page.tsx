@@ -1,11 +1,40 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
-import { Store, ArrowRight, Image as ImageIcon } from 'lucide-react'
+import { Store, ArrowRight, Image as ImageIcon, Copy, Check } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
 export default function Home() {
+  const [copied, setCopied] = useState(false)
+
+  const fiddlerScript = `if(oSession.uriContains("https://wx.waimai.meituan.com/weapp/shop/v1/poi/productlist?ui")){
+    oSession.utilDecodeResponse();
+    oSession.SaveResponse("D:/ailun/xiaochengxumeituan.txt",true);
+    oSession.SaveResponseBody("D:/ailun/xiaochengxumeituan.txt");
+}
+if(oSession.uriContains("https://wx.waimai.meituan.com/weapp/poi/food/render?ui")){
+    oSession.utilDecodeResponse();
+    oSession.SaveResponse("D:/ailun/xiaochengxumeituan01.txt",true);
+    oSession.SaveResponseBody("D:/ailun/xiaochengxumeituan01.txt");
+}
+if(oSession.uriContains("https://waimai-guide.ele.me/h5/mtop.alsc.waimai.store.miniapp.store.detail.body.query.v2/1.0/2.0/")){
+    oSession.utilDecodeResponse();
+    oSession.SaveResponse("D:/ailun/xiaochengxueleme.txt",true);
+    oSession.SaveResponseBody("D:/ailun/xiaochengxueleme.txt");
+}
+if(oSession.uriContains("https://wx.waimai.meituan.com/weapp/v1/poi/food")){
+    oSession.utilDecodeResponse();
+    oSession.SaveResponse("D:/ailun/sanjiantao.txt",true);
+    oSession.SaveResponseBody("D:/ailun/sanjiantao.txt");
+}`
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(fiddlerScript)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-yellow-50 to-orange-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       {/* Header */}
@@ -149,7 +178,8 @@ export default function Home() {
           </div>
 
           {/* 底部说明 */}
-          <div className="mt-12 text-center">
+          <div className="mt-12 space-y-6">
+            {/* 使用说明 */}
             <Card className="bg-gradient-to-r from-orange-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 border-orange-200 dark:border-slate-700">
               <CardContent className="py-6">
                 <div className="flex items-start justify-center space-x-3">
@@ -163,6 +193,53 @@ export default function Home() {
                       <li>• 支持批量下载图片到指定文件夹</li>
                     </ul>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Fiddler配置脚本 */}
+            <Card className="bg-white dark:bg-slate-900 border-2 border-orange-200 dark:border-slate-800">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl font-bold text-gray-800 dark:text-white flex items-center">
+                    <div className="text-2xl mr-2">⚙️</div>
+                    Fiddler 配置脚本
+                  </CardTitle>
+                  <Button
+                    onClick={copyToClipboard}
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-4 h-4 mr-2" />
+                        已复制
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-2" />
+                        复制脚本
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <CardDescription className="text-gray-600 dark:text-gray-400 mt-2">
+                  将以下脚本添加到 Fiddler 的 CustomRules.js 文件中,用于自动保存抓包数据
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="relative">
+                  <pre className="bg-gradient-to-br from-gray-50 to-slate-50 dark:from-slate-950 dark:to-slate-900 rounded-xl p-4 overflow-x-auto border border-gray-200 dark:border-slate-700">
+                    <code className="text-sm text-gray-800 dark:text-gray-200 font-mono whitespace-pre">
+{fiddlerScript}
+                    </code>
+                  </pre>
+                </div>
+                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-500 rounded-r-lg">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    <strong>提示:</strong> 脚本会自动保存到 D:/ailun/ 目录,请确保该目录已创建
+                  </p>
                 </div>
               </CardContent>
             </Card>
