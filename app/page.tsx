@@ -228,9 +228,16 @@ export default function Home() {
 
       // 自动开始监控
       addLog('🚀 自动开始监控文件变化...', 'success')
+      console.log('✅ 设置监控状态为 true')
       setIsMonitoring(true)
-      const interval = setInterval(checkFileUpdate, 2000)
+
+      console.log('⏰ 创建定时器,每2秒检查一次文件更新')
+      const interval = setInterval(() => {
+        console.log('⏱️ 定时器触发 - 调用 checkFileUpdate')
+        checkFileUpdate()
+      }, 2000)
       monitorIntervalRef.current = interval
+      console.log('✅ 定时器已创建,ID:', interval)
     } catch (error: any) {
       if (error.name === 'AbortError') {
         addLog('❌ 已取消文件选择', 'warning')
@@ -242,7 +249,12 @@ export default function Home() {
 
   // 检查文件是否更新
   const checkFileUpdate = async () => {
-    if (!fileHandle) return
+    console.log('🔍 执行 checkFileUpdate, fileHandle:', !!fileHandle, 'isMonitoring:', isMonitoring)
+
+    if (!fileHandle) {
+      console.log('⚠️ fileHandle 为空,跳过检查')
+      return
+    }
 
     try {
       const file = await fileHandle.getFile()
@@ -252,7 +264,8 @@ export default function Home() {
       console.log('检查文件更新:', {
         当前修改时间: new Date(currentModified).toLocaleString(),
         上次修改时间: new Date(lastModified).toLocaleString(),
-        是否更新: currentModified > lastModified
+        是否更新: currentModified > lastModified,
+        fileHandle存在: !!fileHandle
       })
 
       if (currentModified > lastModified) {
