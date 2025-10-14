@@ -540,7 +540,11 @@ export default function Home() {
   }
 
   const downloadAllImages = async () => {
-    if (!storeInfo) {
+    // 检查是否有任何图片可下载
+    const hasStoreImages = storeInfo && (storeInfo.avatarUrl || storeInfo.headerUrl || (storeInfo.posterUrls && storeInfo.posterUrls.length > 0))
+    const hasProductImages = productImages.length > 0
+
+    if (!hasStoreImages && !hasProductImages) {
       addLog('没有可下载的图片', 'warning')
       return
     }
@@ -564,28 +568,43 @@ export default function Home() {
       addLog(`✅ 已选择文件夹: ${dirHandle.name}`, 'success')
       addLog('开始批量下载图片...', 'info')
 
-      const storeName = storeInfo.name.replace(/[<>:"/\\|?*]/g, '_')
       let downloadCount = 0
+      const storeName = storeInfo?.name.replace(/[<>:"/\\|?*]/g, '_') || '店铺'
 
-      // 下载头像
-      if (storeInfo.avatarUrl) {
-        const filename = `${storeName}_头像.jpg`
-        const success = await downloadImageToFolder(storeInfo.avatarUrl, filename, dirHandle)
-        if (success) downloadCount++
+      // 下载店铺基本信息图片
+      if (storeInfo) {
+        // 下载头像
+        if (storeInfo.avatarUrl) {
+          const filename = `${storeName}_头像.jpg`
+          const success = await downloadImageToFolder(storeInfo.avatarUrl, filename, dirHandle)
+          if (success) downloadCount++
+        }
+
+        // 下载店招
+        if (storeInfo.headerUrl) {
+          const filename = `${storeName}_店招.jpg`
+          const success = await downloadImageToFolder(storeInfo.headerUrl, filename, dirHandle)
+          if (success) downloadCount++
+        }
+
+        // 下载海报
+        if (storeInfo.posterUrls) {
+          for (let i = 0; i < storeInfo.posterUrls.length; i++) {
+            const filename = `${storeName}_海报${i + 1}.jpg`
+            const success = await downloadImageToFolder(storeInfo.posterUrls[i], filename, dirHandle)
+            if (success) downloadCount++
+          }
+        }
       }
 
-      // 下载店招
-      if (storeInfo.headerUrl) {
-        const filename = `${storeName}_店招.jpg`
-        const success = await downloadImageToFolder(storeInfo.headerUrl, filename, dirHandle)
-        if (success) downloadCount++
-      }
+      // 下载商品图片
+      if (productImages.length > 0) {
+        addLog(`开始下载 ${productImages.length} 个商品图片...`, 'info')
 
-      // 下载海报
-      if (storeInfo.posterUrls) {
-        for (let i = 0; i < storeInfo.posterUrls.length; i++) {
-          const filename = `${storeName}_海报${i + 1}.jpg`
-          const success = await downloadImageToFolder(storeInfo.posterUrls[i], filename, dirHandle)
+        for (const product of productImages) {
+          const safeName = product.name.replace(/[<>:"/\\|?*]/g, '_')
+          const filename = `${safeName}.jpg`
+          const success = await downloadImageToFolder(product.imageUrl, filename, dirHandle)
           if (success) downloadCount++
         }
       }
@@ -759,8 +778,9 @@ export default function Home() {
                 </div>
               )}
 
-              {/* 文件监控区域 */}
+              {/* 店铺基本信息监控 */}
               <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-blue-200 dark:border-slate-600">
+                <div className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-3">📁 店铺基本信息 (头像/店招/海报)</div>
                 {/* 第一行: 监控状态和文件信息 */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-3">
@@ -801,10 +821,10 @@ export default function Home() {
                         size="lg"
                         variant="outline"
                         className="rounded-xl border-2 border-orange-300 hover:bg-orange-50 dark:border-orange-600 dark:hover:bg-orange-950 transition-all font-semibold"
-                        disabled={!storeInfo || (!avatarLoaded && !headerLoaded && !posterLoaded)}
+                        disabled={(!storeInfo || (!avatarLoaded && !headerLoaded && !posterLoaded)) && productImages.length === 0}
                       >
                         <Download className="w-4 h-4 mr-2" />
-                        批量下载
+                        批量下载全部
                       </Button>
                       <Button
                         onClick={clearData}
@@ -828,6 +848,61 @@ export default function Home() {
                         >
                           <Upload className="w-4 h-4 mr-2" />
                           重新选择
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 商品信息监控 */}
+              <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-green-200 dark:border-slate-600">
+                <div className="text-sm font-semibold text-green-800 dark:text-green-200 mb-3">🛒 商品信息监控</div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {!isMonitoringProduct ? (
+                      <Button
+                        onClick={selectProductFileToMonitor}
+                        size="lg"
+                        variant="default"
+                        className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold bg-green-600 hover:bg-green-700"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {productFileHandle ? '重新选择商品文件' : '选择商品文件'}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={stopProductMonitoring}
+                        size="lg"
+                        variant="destructive"
+                        className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
+                      >
+                        <Square className="w-4 h-4 mr-2" />
+                        停止商品监控
+                      </Button>
+                    )}
+                    {productFileHandle && (
+                      <div className="flex items-center px-3 py-2 bg-white dark:bg-slate-900 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+                        <span className="font-medium">商品文件:</span>
+                        <span className="ml-2 text-green-600 dark:text-green-400">{productFileHandle.name}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {productFileHandle && (
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline" className="px-3 py-1">
+                        {productImages.length} 个商品
+                      </Badge>
+                      {productImages.length > 0 && (
+                        <Button
+                          onClick={clearProductData}
+                          size="sm"
+                          variant="outline"
+                          className="rounded-lg"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1" />
+                          清空商品
                         </Button>
                       )}
                     </div>
@@ -1059,6 +1134,64 @@ export default function Home() {
             </Card>
           </div>
         </div>
+
+        {/* 商品图片展示区域 - 全宽底部 */}
+        {productImages.length > 0 && (
+          <Card className="mt-6 bg-white dark:bg-slate-900 border-green-200 dark:border-slate-800 shadow-lg">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xl font-bold text-gray-800 dark:text-white flex items-center">
+                  <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-emerald-400 rounded-xl flex items-center justify-center mr-2">
+                    <ImageIcon className="w-5 h-5 text-white" />
+                  </div>
+                  商品图片 ({productImages.length})
+                </CardTitle>
+                <Button
+                  onClick={downloadAllImages}
+                  size="lg"
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  批量下载所有图片
+                </Button>
+              </div>
+              <CardDescription className="text-gray-600 dark:text-gray-400 mt-2">
+                商品图片会随着文件更新不断累积,点击批量下载可将店铺基本信息和所有商品图片保存到同一文件夹
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {productImages.map((product) => (
+                  <div key={product.id} className="relative group">
+                    <div className="aspect-square bg-gradient-to-br from-green-50/50 to-emerald-50/50 dark:from-slate-950 dark:to-slate-900 rounded-lg flex items-center justify-center overflow-hidden border-2 border-green-100 dark:border-slate-800">
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="mt-2 px-1">
+                      <p className="text-xs text-gray-700 dark:text-gray-300 font-medium truncate" title={product.name}>
+                        {product.name}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const safeName = product.name.replace(/[<>:"/\\|?*]/g, '_')
+                        downloadImage(product.imageUrl, `${safeName}.jpg`)
+                      }}
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm text-green-600 hover:text-green-700 hover:bg-white dark:text-green-400 dark:hover:bg-slate-800 rounded-lg h-7 w-7 p-0"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </main>
     </div>
   )
