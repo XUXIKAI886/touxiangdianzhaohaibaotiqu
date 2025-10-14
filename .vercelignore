@@ -1,0 +1,4 @@
+# Vercel 构建时忽略的文件
+node_modules
+.next
+.git

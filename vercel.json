@@ -1,8 +1,0 @@
-{
-  "buildCommand": "npm run build",
-  "outputDirectory": "out",
-  "regions": ["sin1"],
-  "github": {
-    "silent": true
-  }
-}
