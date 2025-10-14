@@ -32,8 +32,12 @@ export default function Home() {
   const [headerLoaded, setHeaderLoaded] = useState(false)
   const [posterLoaded, setPosterLoaded] = useState(false)
   const [storeHistory, setStoreHistory] = useState<StoreInfo[]>([])
+  const [isMonitoring, setIsMonitoring] = useState(false)
+  const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null)
+  const [lastModified, setLastModified] = useState<number>(0)
   const logEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // 从本地存储加载数据
   useEffect(() => {
@@ -207,6 +211,100 @@ export default function Home() {
     }
   }
 
+  // 选择要监控的文件
+  const selectFileToMonitor = async () => {
+    try {
+      // 检查浏览器是否支持 File System Access API
+      if (!('showOpenFilePicker' in window)) {
+        addLog('您的浏览器不支持文件系统访问API', 'error')
+        addLog('请使用 Chrome、Edge 或其他基于 Chromium 的浏览器', 'warning')
+        return
+      }
+
+      // 打开文件选择对话框
+      const [handle] = await (window as any).showOpenFilePicker({
+        types: [
+          {
+            description: 'JSON 文件',
+            accept: { 'application/json': ['.json', '.txt'] },
+          },
+        ],
+      })
+
+      setFileHandle(handle)
+      addLog(`已选择文件: ${handle.name}`, 'success')
+      addLog('请点击"开始监控"按钮开始自动监控', 'info')
+
+      // 读取一次文件内容
+      const file = await handle.getFile()
+      setLastModified(file.lastModified)
+      const content = await file.text()
+      const data = JSON.parse(content)
+      processJsonData(data)
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        addLog('已取消文件选择', 'warning')
+      } else {
+        addLog(`选择文件失败: ${error.message}`, 'error')
+      }
+    }
+  }
+
+  // 检查文件是否更新
+  const checkFileUpdate = async () => {
+    if (!fileHandle) return
+
+    try {
+      const file = await fileHandle.getFile()
+
+      if (file.lastModified > lastModified) {
+        addLog('检测到文件更新!', 'success')
+        setLastModified(file.lastModified)
+
+        const content = await file.text()
+        const data = JSON.parse(content)
+        processJsonData(data)
+      }
+    } catch (error: any) {
+      addLog(`读取文件失败: ${error.message}`, 'error')
+      stopMonitoring()
+    }
+  }
+
+  // 开始监控
+  const startMonitoring = () => {
+    if (!fileHandle) {
+      addLog('请先选择要监控的文件', 'warning')
+      return
+    }
+
+    setIsMonitoring(true)
+    addLog('开始监控文件变化...', 'success')
+
+    // 每2秒检查一次文件
+    const interval = setInterval(checkFileUpdate, 2000)
+    monitorIntervalRef.current = interval
+  }
+
+  // 停止监控
+  const stopMonitoring = () => {
+    if (monitorIntervalRef.current) {
+      clearInterval(monitorIntervalRef.current)
+      monitorIntervalRef.current = null
+    }
+    setIsMonitoring(false)
+    addLog('已停止监控', 'warning')
+  }
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      if (monitorIntervalRef.current) {
+        clearInterval(monitorIntervalRef.current)
+      }
+    }
+  }, [])
+
   const getLogColor = (type: LogEntry['type']) => {
     switch (type) {
       case 'success': return 'text-green-600 dark:text-green-400'
@@ -305,8 +403,11 @@ export default function Home() {
                 美团外卖店铺图片提取系统
               </h1>
             </div>
-            <Badge variant="default" className="px-4 py-1.5 rounded-full text-sm font-medium">
-              💾 本地存储版
+            <Badge
+              variant={isMonitoring ? "default" : "secondary"}
+              className="px-4 py-1.5 rounded-full text-sm font-medium"
+            >
+              {isMonitoring ? '🟢 监控中' : '⭕ 未监控'}
             </Badge>
           </div>
         </div>
@@ -319,47 +420,92 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="text-xl font-bold text-gray-800 dark:text-white">控制面板</CardTitle>
             <CardDescription className="text-gray-600 dark:text-gray-400">
-              上传 Fiddler 抓取的 JSON 文件,提取店铺图片数据
+              选择文件开始自动监控,或手动上传 Fiddler 抓取的 JSON 文件
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                size="lg"
-                variant="default"
-                className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                上传 JSON 文件
-              </Button>
-              <Button
-                onClick={downloadAllImages}
-                size="lg"
-                variant="outline"
-                className="w-full sm:w-auto rounded-xl border-2 border-orange-300 hover:bg-orange-50 dark:border-orange-600 dark:hover:bg-orange-950 transition-all font-semibold"
-                disabled={!storeInfo || (!avatarLoaded && !headerLoaded && !posterLoaded)}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                批量下载图片
-              </Button>
-              <Button
-                onClick={clearData}
-                size="lg"
-                variant="destructive"
-                className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
-                disabled={!storeInfo}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                清空数据
-              </Button>
+            <div className="flex flex-col gap-4">
+              {/* 文件监控区域 */}
+              <div className="flex flex-col sm:flex-row gap-3 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-blue-200 dark:border-slate-600">
+                <Button
+                  onClick={selectFileToMonitor}
+                  size="lg"
+                  variant="default"
+                  className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold bg-blue-600 hover:bg-blue-700"
+                  disabled={isMonitoring}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  选择监控文件
+                </Button>
+                {!isMonitoring ? (
+                  <Button
+                    onClick={startMonitoring}
+                    size="lg"
+                    variant="default"
+                    className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold bg-green-600 hover:bg-green-700"
+                    disabled={!fileHandle}
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    开始监控
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={stopMonitoring}
+                    size="lg"
+                    variant="destructive"
+                    className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
+                  >
+                    <Square className="w-4 h-4 mr-2" />
+                    停止监控
+                  </Button>
+                )}
+                {fileHandle && (
+                  <div className="flex items-center px-3 py-2 bg-white dark:bg-slate-900 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+                    <span className="font-medium">当前文件:</span>
+                    <span className="ml-2 text-blue-600 dark:text-blue-400">{fileHandle.name}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 手动上传区域 */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  size="lg"
+                  variant="outline"
+                  className="w-full sm:w-auto rounded-xl border-2 border-orange-300 hover:bg-orange-50 dark:border-orange-600 dark:hover:bg-orange-950 transition-all font-semibold"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  手动上传 JSON
+                </Button>
+                <Button
+                  onClick={downloadAllImages}
+                  size="lg"
+                  variant="outline"
+                  className="w-full sm:w-auto rounded-xl border-2 border-orange-300 hover:bg-orange-50 dark:border-orange-600 dark:hover:bg-orange-950 transition-all font-semibold"
+                  disabled={!storeInfo || (!avatarLoaded && !headerLoaded && !posterLoaded)}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  批量下载图片
+                </Button>
+                <Button
+                  onClick={clearData}
+                  size="lg"
+                  variant="destructive"
+                  className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
+                  disabled={!storeInfo}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  清空数据
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
