@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowLeft, Store, Construction } from 'lucide-react'
+import { ArrowLeft, Store, Construction, Home as HomeIcon } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -22,8 +22,8 @@ export default function ElemePage() {
             </div>
             <Link href="/">
               <Button variant="outline" className="rounded-xl">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                返回首页
+                <HomeIcon className="w-4 h-4 mr-2" />
+                返回主页
               </Button>
             </Link>
           </div>

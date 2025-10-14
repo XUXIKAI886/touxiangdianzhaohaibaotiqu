@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Play, Square, Image as ImageIcon, Store, Download, Upload, Trash2 } from 'lucide-react'
+import Link from 'next/link'
+import { Play, Square, Image as ImageIcon, Store, Download, Upload, Trash2, Home as HomeIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -848,12 +849,20 @@ export default function Home() {
                 美团外卖店铺图片提取系统
               </h1>
             </div>
-            <Badge
-              variant={isMonitoring ? "default" : "secondary"}
-              className="px-4 py-1.5 rounded-full text-sm font-medium"
-            >
-              {isMonitoring ? '🟢 监控中' : '⭕ 未监控'}
-            </Badge>
+            <div className="flex items-center space-x-3">
+              <Badge
+                variant={isMonitoring ? "default" : "secondary"}
+                className="px-4 py-1.5 rounded-full text-sm font-medium"
+              >
+                {isMonitoring ? '🟢 监控中' : '⭕ 未监控'}
+              </Badge>
+              <Link href="/">
+                <Button variant="outline" className="rounded-xl">
+                  <HomeIcon className="w-4 h-4 mr-2" />
+                  返回主页
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </header>
