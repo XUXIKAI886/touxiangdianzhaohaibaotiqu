@@ -36,7 +36,6 @@ export default function Home() {
   const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null)
   const [lastModified, setLastModified] = useState<number>(0)
   const logEndRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // 从本地存储加载数据
@@ -85,29 +84,6 @@ export default function Home() {
   const removeSizeParams = (url: string): string => {
     if (!url) return url
     return url.replace(/@\d+w_\d+h_\d+e_\d+c/g, '')
-  }
-
-  // 处理JSON文件上传
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    addLog(`正在读取文件: ${file.name}`, 'info')
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string
-        const data = JSON.parse(content)
-        processJsonData(data)
-      } catch (error) {
-        addLog(`文件解析失败: ${error}`, 'error')
-      }
-    }
-    reader.onerror = () => {
-      addLog('文件读取失败', 'error')
-    }
-    reader.readAsText(file)
   }
 
   // 解析JSON数据
@@ -425,7 +401,7 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="text-xl font-bold text-gray-800 dark:text-white">控制面板</CardTitle>
             <CardDescription className="text-gray-600 dark:text-gray-400">
-              选择文件开始自动监控,或手动上传 Fiddler 抓取的 JSON 文件
+              选择要监控的文件,系统将自动检测文件变化并提取店铺图片
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -495,24 +471,8 @@ export default function Home() {
                 )}
               </div>
 
-              {/* 手动上传区域 */}
+              {/* 操作按钮区域 */}
               <div className="flex flex-col sm:flex-row gap-3">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".json"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <Button
-                  onClick={() => fileInputRef.current?.click()}
-                  size="lg"
-                  variant="outline"
-                  className="w-full sm:w-auto rounded-xl border-2 border-orange-300 hover:bg-orange-50 dark:border-orange-600 dark:hover:bg-orange-950 transition-all font-semibold"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  手动上传 JSON
-                </Button>
                 <Button
                   onClick={downloadAllImages}
                   size="lg"
