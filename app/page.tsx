@@ -15,6 +15,13 @@ interface StoreInfo {
   updateTime: string
 }
 
+interface ProductImage {
+  id: string
+  name: string
+  imageUrl: string
+  timestamp: number
+}
+
 interface LogEntry {
   timestamp: string
   message: string
@@ -40,6 +47,15 @@ export default function Home() {
   // 使用 ref 存储 fileHandle,避免闭包问题
   const fileHandleRef = useRef<FileSystemFileHandle | null>(null)
   const lastModifiedRef = useRef<number>(0)
+
+  // 商品监控相关状态
+  const [isMonitoringProduct, setIsMonitoringProduct] = useState(false)
+  const [productFileHandle, setProductFileHandle] = useState<FileSystemFileHandle | null>(null)
+  const [lastProductModified, setLastProductModified] = useState<number>(0)
+  const [productImages, setProductImages] = useState<ProductImage[]>([])
+  const productFileHandleRef = useRef<FileSystemFileHandle | null>(null)
+  const lastProductModifiedRef = useRef<number>(0)
+  const productMonitorIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // 从本地存储加载数据
   useEffect(() => {
@@ -328,8 +344,169 @@ export default function Home() {
       if (monitorIntervalRef.current) {
         clearInterval(monitorIntervalRef.current)
       }
+      if (productMonitorIntervalRef.current) {
+        clearInterval(productMonitorIntervalRef.current)
+      }
     }
   }, [])
+
+  // ========== 商品监控相关函数 ==========
+
+  // 选择商品监控文件
+  const selectProductFileToMonitor = async () => {
+    try {
+      if (!('showOpenFilePicker' in window)) {
+        addLog('您的浏览器不支持文件系统访问API', 'error')
+        return
+      }
+
+      addLog('📂 请选择商品文件: xiaochengxumeituan.txt', 'info')
+
+      const [handle] = await (window as any).showOpenFilePicker({
+        types: [{
+          description: 'JSON 文件 (*.txt, *.json)',
+          accept: { 'application/json': ['.json', '.txt'] },
+        }],
+        startIn: 'desktop',
+      })
+
+      setProductFileHandle(handle)
+      productFileHandleRef.current = handle
+      addLog(`✅ 已选择商品文件: ${handle.name}`, 'success')
+
+      // 读取一次文件并处理
+      const file = await handle.getFile()
+      const initialModified = file.lastModified
+      setLastProductModified(initialModified)
+      lastProductModifiedRef.current = initialModified
+
+      const content = await file.text()
+      const data = JSON.parse(content)
+      processProductData(data)
+
+      // 自动开始监控
+      addLog('🚀 自动开始监控商品文件变化...', 'success')
+      setIsMonitoringProduct(true)
+
+      const interval = setInterval(() => {
+        checkProductFileUpdate()
+      }, 2000)
+      productMonitorIntervalRef.current = interval
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        addLog('❌ 已取消商品文件选择', 'warning')
+      } else {
+        addLog(`❌ 选择商品文件失败: ${error.message}`, 'error')
+      }
+    }
+  }
+
+  // 检查商品文件更新
+  const checkProductFileUpdate = async () => {
+    const handle = productFileHandleRef.current
+    const lastMod = lastProductModifiedRef.current
+
+    if (!handle) return
+
+    try {
+      const file = await handle.getFile()
+      const currentModified = file.lastModified
+
+      console.log('🔍 检查商品文件更新:', {
+        当前修改时间: new Date(currentModified).toLocaleString(),
+        上次修改时间: new Date(lastMod).toLocaleString(),
+        是否更新: currentModified > lastMod
+      })
+
+      if (currentModified > lastMod) {
+        addLog('🔄 检测到商品文件更新!', 'success')
+
+        setLastProductModified(currentModified)
+        lastProductModifiedRef.current = currentModified
+
+        const content = await file.text()
+        const data = JSON.parse(content)
+        processProductData(data)
+      }
+    } catch (error: any) {
+      addLog(`读取商品文件失败: ${error.message}`, 'error')
+      stopProductMonitoring()
+    }
+  }
+
+  // 处理商品数据
+  const processProductData = (data: any) => {
+    try {
+      addLog('开始处理商品数据...', 'info')
+
+      // 提取商品列表
+      const spuList = data.data?.product?.spu_list || data.data?.spu_list || []
+
+      if (spuList.length === 0) {
+        addLog('未找到商品数据', 'warning')
+        return
+      }
+
+      let newProductCount = 0
+
+      for (const spu of spuList) {
+        const productName = spu.spu_name || spu.name || '未知商品'
+        const productId = spu.spu_id?.toString() || spu.id?.toString() || Date.now().toString()
+
+        // 提取商品主图
+        const mainPic = spu.min_spu_pic || spu.picture || spu.pic_url || ''
+
+        if (mainPic) {
+          const imageUrl = removeSizeParams(mainPic)
+
+          // 检查是否已存在(根据 ID 去重)
+          const existingIndex = productImages.findIndex(p => p.id === productId)
+
+          if (existingIndex === -1) {
+            // 新商品图片
+            const newProduct: ProductImage = {
+              id: productId,
+              name: productName,
+              imageUrl: imageUrl,
+              timestamp: Date.now()
+            }
+
+            setProductImages(prev => [...prev, newProduct])
+            newProductCount++
+            addLog(`📦 新商品: ${productName}`, 'success')
+          }
+        }
+      }
+
+      if (newProductCount > 0) {
+        addLog(`✅ 本次新增 ${newProductCount} 个商品图片`, 'success')
+        addLog(`📊 当前共有 ${productImages.length + newProductCount} 个商品图片`, 'info')
+      } else {
+        addLog('未发现新商品图片', 'info')
+      }
+
+    } catch (error: any) {
+      addLog(`处理商品数据失败: ${error.message}`, 'error')
+    }
+  }
+
+  // 停止商品监控
+  const stopProductMonitoring = () => {
+    if (productMonitorIntervalRef.current) {
+      clearInterval(productMonitorIntervalRef.current)
+      productMonitorIntervalRef.current = null
+    }
+    setIsMonitoringProduct(false)
+    addLog('已停止商品监控', 'warning')
+  }
+
+  // 清空商品数据
+  const clearProductData = () => {
+    if (confirm('确定要清空所有商品图片吗?')) {
+      setProductImages([])
+      addLog('商品数据已清空', 'warning')
+    }
+  }
 
   const getLogColor = (type: LogEntry['type']) => {
     switch (type) {
