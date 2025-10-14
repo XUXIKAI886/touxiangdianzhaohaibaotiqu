@@ -37,6 +37,9 @@ export default function Home() {
   const [lastModified, setLastModified] = useState<number>(0)
   const logContainerRef = useRef<HTMLDivElement>(null)
   const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  // 使用 ref 存储 fileHandle,避免闭包问题
+  const fileHandleRef = useRef<FileSystemFileHandle | null>(null)
+  const lastModifiedRef = useRef<number>(0)
 
   // 从本地存储加载数据
   useEffect(() => {
@@ -215,13 +218,18 @@ export default function Home() {
         startIn: 'desktop', // 从桌面开始(浏览器会记住上次的位置)
       })
 
+      // 同时设置 state 和 ref
       setFileHandle(handle)
+      fileHandleRef.current = handle
       addLog(`✅ 已选择文件: ${handle.name}`, 'success')
       addLog('📌 提示: 浏览器会记住此位置,下次打开会更快', 'info')
 
       // 读取一次文件内容
       const file = await handle.getFile()
-      setLastModified(file.lastModified)
+      const initialModified = file.lastModified
+      setLastModified(initialModified)
+      lastModifiedRef.current = initialModified
+
       const content = await file.text()
       const data = JSON.parse(content)
       processJsonData(data)
@@ -247,31 +255,37 @@ export default function Home() {
     }
   }
 
-  // 检查文件是否更新
+  // 检查文件是否更新 - 使用 ref 避免闭包问题
   const checkFileUpdate = async () => {
-    console.log('🔍 执行 checkFileUpdate, fileHandle:', !!fileHandle, 'isMonitoring:', isMonitoring)
+    const handle = fileHandleRef.current
+    const lastMod = lastModifiedRef.current
 
-    if (!fileHandle) {
-      console.log('⚠️ fileHandle 为空,跳过检查')
+    console.log('🔍 执行 checkFileUpdate, fileHandle:', !!handle, 'lastModified:', lastMod)
+
+    if (!handle) {
+      console.log('⚠️ fileHandleRef 为空,跳过检查')
       return
     }
 
     try {
-      const file = await fileHandle.getFile()
+      const file = await handle.getFile()
       const currentModified = file.lastModified
 
       // 添加调试日志
       console.log('检查文件更新:', {
         当前修改时间: new Date(currentModified).toLocaleString(),
-        上次修改时间: new Date(lastModified).toLocaleString(),
-        是否更新: currentModified > lastModified,
-        fileHandle存在: !!fileHandle
+        上次修改时间: new Date(lastMod).toLocaleString(),
+        是否更新: currentModified > lastMod,
+        fileHandle存在: !!handle
       })
 
-      if (currentModified > lastModified) {
+      if (currentModified > lastMod) {
         addLog('🔄 检测到文件更新!', 'success')
         addLog(`文件修改时间: ${new Date(currentModified).toLocaleString('zh-CN')}`, 'info')
+
+        // 同时更新 state 和 ref
         setLastModified(currentModified)
+        lastModifiedRef.current = currentModified
 
         const content = await file.text()
         const data = JSON.parse(content)
@@ -285,7 +299,7 @@ export default function Home() {
 
   // 开始监控
   const startMonitoring = () => {
-    if (!fileHandle) {
+    if (!fileHandleRef.current) {
       addLog('请先选择要监控的文件', 'warning')
       return
     }
