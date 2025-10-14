@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 静态导出模式 - 支持 Vercel 和 GitHub Pages 部署
   output: 'export',
   images: {
     unoptimized: true,
@@ -18,6 +19,7 @@ const nextConfig = {
       },
     ],
   },
+  // GitHub Pages 部署时需要 basePath
   basePath: process.env.NODE_ENV === 'production' ? '/touxiangdianzhaohaibaotiqu' : '',
   assetPrefix: process.env.NODE_ENV === 'production' ? '/touxiangdianzhaohaibaotiqu' : '',
 }
