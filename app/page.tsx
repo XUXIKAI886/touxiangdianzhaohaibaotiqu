@@ -343,8 +343,9 @@ export default function Home() {
   const downloadImage = async (url: string, filename: string) => {
     try {
       addLog(`开始下载: ${filename}`, 'info')
-      const response = await fetch(url)
-      const blob = await response.blob()
+
+      // 使用 canvas 绕过 CORS
+      const blob = await fetchImageAsBlob(url)
       const blobUrl = window.URL.createObjectURL(blob)
 
       const link = document.createElement('a')
@@ -356,8 +357,8 @@ export default function Home() {
 
       window.URL.revokeObjectURL(blobUrl)
       addLog(`下载成功: ${filename}`, 'success')
-    } catch (error) {
-      addLog(`下载失败: ${filename}`, 'error')
+    } catch (error: any) {
+      addLog(`下载失败: ${filename} - ${error.message}`, 'error')
     }
   }
 
@@ -427,13 +428,8 @@ export default function Home() {
     try {
       addLog(`下载中: ${filename}`, 'info')
 
-      // 获取图片数据
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const blob = await response.blob()
+      // 使用 canvas 绕过 CORS 限制
+      const blob = await fetchImageAsBlob(url)
 
       // 在选定的文件夹中创建文件
       const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
@@ -449,6 +445,54 @@ export default function Home() {
       addLog(`❌ 下载失败: ${filename} - ${error.message}`, 'error')
       return false
     }
+  }
+
+  // 通过 canvas 获取图片 Blob (绕过 CORS)
+  const fetchImageAsBlob = async (url: string): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.crossOrigin = 'anonymous' // 尝试 CORS
+
+      img.onload = () => {
+        try {
+          // 创建 canvas
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
+
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('无法创建 canvas context'))
+            return
+          }
+
+          // 绘制图片
+          ctx.drawImage(img, 0, 0)
+
+          // 转换为 Blob
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob)
+              } else {
+                reject(new Error('无法转换为 Blob'))
+              }
+            },
+            'image/jpeg',
+            0.95
+          )
+        } catch (error) {
+          reject(error)
+        }
+      }
+
+      img.onerror = () => {
+        reject(new Error('图片加载失败'))
+      }
+
+      // 添加时间戳防止缓存问题
+      img.src = url.includes('?') ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`
+    })
   }
 
   const clearData = () => {
