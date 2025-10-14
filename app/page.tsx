@@ -221,19 +221,24 @@ export default function Home() {
         return
       }
 
+      addLog('📂 请在弹出的对话框中导航到 D:\\ailun 文件夹', 'info')
+      addLog('📄 然后选择 sanjiantao.txt 文件', 'info')
+
       // 打开文件选择对话框
       const [handle] = await (window as any).showOpenFilePicker({
         types: [
           {
-            description: 'JSON 文件',
+            description: 'JSON 文件 (*.txt, *.json)',
             accept: { 'application/json': ['.json', '.txt'] },
           },
         ],
+        startIn: 'desktop', // 从桌面开始(浏览器会记住上次的位置)
       })
 
       setFileHandle(handle)
-      addLog(`已选择文件: ${handle.name}`, 'success')
-      addLog('请点击"开始监控"按钮开始自动监控', 'info')
+      addLog(`✅ 已选择文件: ${handle.name}`, 'success')
+      addLog('📌 提示: 浏览器会记住此位置,下次打开会更快', 'info')
+      addLog('🚀 请点击"开始监控"按钮开始自动监控', 'info')
 
       // 读取一次文件内容
       const file = await handle.getFile()
@@ -243,9 +248,9 @@ export default function Home() {
       processJsonData(data)
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        addLog('已取消文件选择', 'warning')
+        addLog('❌ 已取消文件选择', 'warning')
       } else {
-        addLog(`选择文件失败: ${error.message}`, 'error')
+        addLog(`❌ 选择文件失败: ${error.message}`, 'error')
       }
     }
   }
@@ -425,6 +430,29 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-4">
+              {/* 路径提示 */}
+              {!fileHandle && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">💡</span>
+                    <div className="flex-1 text-sm">
+                      <p className="font-semibold text-amber-800 dark:text-amber-200 mb-1">
+                        快速选择提示
+                      </p>
+                      <p className="text-amber-700 dark:text-amber-300">
+                        点击"选择监控文件"后,在弹出的对话框中:
+                      </p>
+                      <ol className="mt-2 space-y-1 text-amber-700 dark:text-amber-300 list-decimal list-inside">
+                        <li>在地址栏输入: <code className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900 rounded font-mono text-xs">D:\ailun</code></li>
+                        <li>按 Enter 键快速跳转到该文件夹</li>
+                        <li>选择 <code className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900 rounded font-mono text-xs">sanjiantao.txt</code> 文件</li>
+                        <li>浏览器会记住此位置,下次更快!</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* 文件监控区域 */}
               <div className="flex flex-col sm:flex-row gap-3 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-blue-200 dark:border-slate-600">
                 <Button
@@ -435,7 +463,7 @@ export default function Home() {
                   disabled={isMonitoring}
                 >
                   <Upload className="w-4 h-4 mr-2" />
-                  选择监控文件
+                  {fileHandle ? '重新选择文件' : '选择监控文件'}
                 </Button>
                 {!isMonitoring ? (
                   <Button
