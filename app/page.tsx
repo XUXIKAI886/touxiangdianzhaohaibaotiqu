@@ -218,7 +218,6 @@ export default function Home() {
       setFileHandle(handle)
       addLog(`✅ 已选择文件: ${handle.name}`, 'success')
       addLog('📌 提示: 浏览器会记住此位置,下次打开会更快', 'info')
-      addLog('🚀 请点击"开始监控"按钮开始自动监控', 'info')
 
       // 读取一次文件内容
       const file = await handle.getFile()
@@ -226,6 +225,12 @@ export default function Home() {
       const content = await file.text()
       const data = JSON.parse(content)
       processJsonData(data)
+
+      // 自动开始监控
+      addLog('🚀 自动开始监控文件变化...', 'success')
+      setIsMonitoring(true)
+      const interval = setInterval(checkFileUpdate, 2000)
+      monitorIntervalRef.current = interval
     } catch (error: any) {
       if (error.name === 'AbortError') {
         addLog('❌ 已取消文件选择', 'warning')
@@ -434,69 +439,79 @@ export default function Home() {
               )}
 
               {/* 文件监控区域 */}
-              <div className="flex flex-col sm:flex-row gap-3 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-blue-200 dark:border-slate-600">
-                <Button
-                  onClick={selectFileToMonitor}
-                  size="lg"
-                  variant="default"
-                  className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold bg-blue-600 hover:bg-blue-700"
-                  disabled={isMonitoring}
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  {fileHandle ? '重新选择文件' : '选择监控文件'}
-                </Button>
-                {!isMonitoring ? (
-                  <Button
-                    onClick={startMonitoring}
-                    size="lg"
-                    variant="default"
-                    className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold bg-green-600 hover:bg-green-700"
-                    disabled={!fileHandle}
-                  >
-                    <Play className="w-4 h-4 mr-2" />
-                    开始监控
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={stopMonitoring}
-                    size="lg"
-                    variant="destructive"
-                    className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
-                  >
-                    <Square className="w-4 h-4 mr-2" />
-                    停止监控
-                  </Button>
-                )}
-                {fileHandle && (
-                  <div className="flex items-center px-3 py-2 bg-white dark:bg-slate-900 rounded-lg text-sm text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">当前文件:</span>
-                    <span className="ml-2 text-blue-600 dark:text-blue-400">{fileHandle.name}</span>
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-blue-200 dark:border-slate-600">
+                {/* 第一行: 监控状态和文件信息 */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3">
+                    {!isMonitoring ? (
+                      <Button
+                        onClick={selectFileToMonitor}
+                        size="lg"
+                        variant="default"
+                        className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {fileHandle ? '重新选择文件' : '选择监控文件'}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={stopMonitoring}
+                        size="lg"
+                        variant="destructive"
+                        className="rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
+                      >
+                        <Square className="w-4 h-4 mr-2" />
+                        停止监控
+                      </Button>
+                    )}
+                    {fileHandle && (
+                      <div className="flex items-center px-3 py-2 bg-white dark:bg-slate-900 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+                        <span className="font-medium">当前文件:</span>
+                        <span className="ml-2 text-blue-600 dark:text-blue-400">{fileHandle.name}</span>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* 操作按钮区域 */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button
-                  onClick={downloadAllImages}
-                  size="lg"
-                  variant="outline"
-                  className="w-full sm:w-auto rounded-xl border-2 border-orange-300 hover:bg-orange-50 dark:border-orange-600 dark:hover:bg-orange-950 transition-all font-semibold"
-                  disabled={!storeInfo || (!avatarLoaded && !headerLoaded && !posterLoaded)}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  批量下载图片
-                </Button>
-                <Button
-                  onClick={clearData}
-                  size="lg"
-                  variant="destructive"
-                  className="w-full sm:w-auto rounded-xl shadow-md hover:shadow-lg transition-all font-semibold"
-                  disabled={!storeInfo}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  清空数据
-                </Button>
+                  {/* 第二行按钮组: 批量下载、清空数据、重新选择(在监控时显示) */}
+                  {fileHandle && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={downloadAllImages}
+                        size="lg"
+                        variant="outline"
+                        className="rounded-xl border-2 border-orange-300 hover:bg-orange-50 dark:border-orange-600 dark:hover:bg-orange-950 transition-all font-semibold"
+                        disabled={!storeInfo || (!avatarLoaded && !headerLoaded && !posterLoaded)}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        批量下载
+                      </Button>
+                      <Button
+                        onClick={clearData}
+                        size="lg"
+                        variant="outline"
+                        className="rounded-xl border-2 border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-900 transition-all font-semibold"
+                        disabled={!storeInfo}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        清空数据
+                      </Button>
+                      {isMonitoring && (
+                        <Button
+                          onClick={() => {
+                            stopMonitoring()
+                            setTimeout(() => selectFileToMonitor(), 100)
+                          }}
+                          size="lg"
+                          variant="outline"
+                          className="rounded-xl border-2 border-blue-300 hover:bg-blue-50 dark:border-blue-600 dark:hover:bg-blue-950 transition-all font-semibold"
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          重新选择
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>
