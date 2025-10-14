@@ -50,11 +50,32 @@ export default function ElemePage() {
 
   // 将 imageHash 转换为完整的图片 URL
   const imageHashToUrl = (imageHash: string): string => {
-    if (!imageHash || imageHash.length < 4) return ''
-    // 饿了么图片 URL 格式: https://cube.elemecdn.com/前2位/3-4位/完整hash
-    const part1 = imageHash.substring(0, 2)
-    const part2 = imageHash.substring(2, 4)
-    return `https://cube.elemecdn.com/${part1}/${part2}/${imageHash}`
+    if (!imageHash || imageHash.length < 6) return ''
+
+    // 饿了么图片 URL 格式: https://cube.elemecdn.com/{1个字符}/{2个字符}/{文件名}.{扩展名}
+    // imageHash 格式: b6d6e76768e7621a6e4b9c09befea61bjpg (前3个字符是目录信息)
+    // 例如: b6d6e76768e7621a6e4b9c09befea61bjpg
+    //   -> dir1: b (第1个字符)
+    //   -> dir2: 6d (第2-3个字符)
+    //   -> filename: 6e76768e7621a6e4b9c09befea61bjpg (从第4个字符开始)
+    //   -> 最终URL: https://cube.elemecdn.com/b/6d/6e76768e7621a6e4b9c09befea61bjpg.jpg
+
+    const dir1 = imageHash.charAt(0)           // 第1个字符
+    const dir2 = imageHash.substring(1, 3)     // 第2-3个字符
+    const filename = imageHash.substring(3)    // 从第4个字符开始
+
+    // 从文件名中检测格式关键词来确定扩展名
+    let extension = 'jpg' // 默认扩展名 (注意是jpg不是jpeg)
+    if (filename.toLowerCase().includes('png')) {
+      extension = 'png'
+    } else if (filename.toLowerCase().includes('gif')) {
+      extension = 'gif'
+    } else if (filename.toLowerCase().includes('webp')) {
+      extension = 'webp'
+    }
+    // jpg和jpeg都统一为jpg
+
+    return `https://cube.elemecdn.com/${dir1}/${dir2}/${filename}.${extension}`
   }
 
   // 解析饿了么商品数据
@@ -94,9 +115,10 @@ export default function ElemePage() {
             const existingIndex = productImages.findIndex(p => p.name === productName)
 
             if (existingIndex === -1) {
-              // 新商品图片
+              // 新商品图片 (使用名称+时间戳确保唯一ID)
+              const uniqueId = `${productId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
               const newProduct: ProductImage = {
-                id: productId,
+                id: uniqueId,
                 name: productName,
                 imageUrl: imageUrl,
                 timestamp: Date.now()
@@ -105,6 +127,13 @@ export default function ElemePage() {
               setProductImages(prev => [...prev, newProduct])
               newProductCount++
               addLog(`📦 新商品: ${productName}`, 'success')
+
+              // 调试日志: 输出前3个商品的URL到控制台
+              if (newProductCount <= 3) {
+                console.log(`[DEBUG] 商品: ${productName}`)
+                console.log(`[DEBUG] imageHash: ${imageHash}`)
+                console.log(`[DEBUG] 生成URL: ${imageUrl}`)
+              }
             }
           }
         }
@@ -540,82 +569,32 @@ export default function ElemePage() {
           </CardContent>
         </Card>
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Logs */}
-          <Card className="bg-white dark:bg-slate-900 border-blue-200 dark:border-slate-800 shadow-md">
-            <CardHeader>
-              <CardTitle className="text-lg font-bold text-gray-800 dark:text-white">📋 运行日志</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div
-                ref={logContainerRef}
-                className="h-[500px] overflow-y-auto bg-gradient-to-br from-blue-50/50 to-cyan-50/50 dark:from-slate-950 dark:to-slate-900 rounded-2xl p-4 font-mono text-sm border border-blue-100 dark:border-slate-800"
-              >
-                {logs.length === 0 && (
-                  <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-                    暂无日志记录
-                  </div>
-                )}
-                {logs.map((log, index) => (
-                  <div key={index} className={`${getLogColor(log.type)} mb-1 hover:bg-blue-100/30 dark:hover:bg-slate-800/30 px-2 py-0.5 rounded transition-colors`}>
-                    <span className="text-gray-600 dark:text-gray-400">[{log.timestamp}]</span> {log.message}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Image Preview */}
-          <Card className="bg-white dark:bg-slate-900 border-blue-200 dark:border-slate-800 shadow-md">
-            <CardHeader>
-              <CardTitle className="text-lg font-bold text-gray-800 dark:text-white flex items-center">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-xl flex items-center justify-center mr-2">
-                  <ImageIcon className="w-5 h-5 text-white" />
+        {/* 运行日志 - 全宽显示 */}
+        <Card className="mb-6 bg-white dark:bg-slate-900 border-blue-200 dark:border-slate-800 shadow-md">
+          <CardHeader>
+            <CardTitle className="text-xl font-bold text-gray-800 dark:text-white">📋 运行日志</CardTitle>
+            <CardDescription className="text-gray-600 dark:text-gray-400">
+              实时显示系统运行状态和操作记录
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div
+              ref={logContainerRef}
+              className="h-[400px] overflow-y-auto bg-gradient-to-br from-blue-50/50 to-cyan-50/50 dark:from-slate-950 dark:to-slate-900 rounded-2xl p-4 font-mono text-sm border border-blue-100 dark:border-slate-800"
+            >
+              {logs.length === 0 && (
+                <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+                  暂无日志记录
                 </div>
-                商品图片预览 ({uniqueProducts.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[500px] overflow-y-auto">
-                {uniqueProducts.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-gray-400 dark:text-gray-600">
-                    暂无商品图片
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    {uniqueProducts.map((product) => (
-                      <div key={product.id} className="relative group">
-                        <div className="aspect-square bg-gradient-to-br from-blue-50/50 to-cyan-50/50 dark:from-slate-950 dark:to-slate-900 rounded-lg flex items-center justify-center overflow-hidden border border-blue-100 dark:border-slate-800">
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="mt-1 px-0.5">
-                          <p className="text-xs text-gray-700 dark:text-gray-300 font-medium truncate" title={product.name}>
-                            {product.name}
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            const safeName = product.name.replace(/[<>:"/\\|?*]/g, '_')
-                            downloadImage(product.imageUrl, `${safeName}.jpg`)
-                          }}
-                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm text-blue-600 hover:text-blue-700 hover:bg-white dark:text-blue-400 dark:hover:bg-slate-800 rounded-md h-6 w-6 p-0"
-                        >
-                          <Download className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              )}
+              {logs.map((log, index) => (
+                <div key={index} className={`${getLogColor(log.type)} mb-1 hover:bg-blue-100/30 dark:hover:bg-slate-800/30 px-2 py-0.5 rounded transition-colors`}>
+                  <span className="text-gray-600 dark:text-gray-400">[{log.timestamp}]</span> {log.message}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* 商品图片展示区域 - 全宽底部 */}
         {productImages.length > 0 && (
