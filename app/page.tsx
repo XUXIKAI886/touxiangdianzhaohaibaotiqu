@@ -35,7 +35,7 @@ export default function Home() {
   const [isMonitoring, setIsMonitoring] = useState(false)
   const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null)
   const [lastModified, setLastModified] = useState<number>(0)
-  const logEndRef = useRef<HTMLDivElement>(null)
+  const logContainerRef = useRef<HTMLDivElement>(null)
   const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // 从本地存储加载数据
@@ -71,13 +71,17 @@ export default function Home() {
   }
 
   const scrollToBottom = () => {
-    if (logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    // 只滚动日志容器,不影响整个页面
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight
     }
   }
 
   useEffect(() => {
-    scrollToBottom()
+    // 只有当日志容器存在且有内容时才滚动
+    if (logs.length > 0) {
+      scrollToBottom()
+    }
   }, [logs])
 
   // 移除美团图片URL的尺寸参数,获取原图
@@ -568,7 +572,10 @@ export default function Home() {
                 <CardTitle className="text-lg font-bold text-gray-800 dark:text-white">📋 运行日志</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-[400px] overflow-y-auto bg-gradient-to-br from-orange-50/50 to-yellow-50/50 dark:from-slate-950 dark:to-slate-900 rounded-2xl p-4 font-mono text-sm border border-orange-100 dark:border-slate-800">
+                <div
+                  ref={logContainerRef}
+                  className="h-[400px] overflow-y-auto bg-gradient-to-br from-orange-50/50 to-yellow-50/50 dark:from-slate-950 dark:to-slate-900 rounded-2xl p-4 font-mono text-sm border border-orange-100 dark:border-slate-800"
+                >
                   {logs.length === 0 && (
                     <div className="text-center text-gray-500 dark:text-gray-400 py-8">
                       暂无日志记录
@@ -579,7 +586,6 @@ export default function Home() {
                       <span className="text-gray-600 dark:text-gray-400">[{log.timestamp}]</span> {log.message}
                     </div>
                   ))}
-                  <div ref={logEndRef} />
                 </div>
               </CardContent>
             </Card>
