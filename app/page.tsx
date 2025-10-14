@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Store, ArrowRight, Image as ImageIcon, Copy, Check } from 'lucide-react'
+import { Store, ArrowRight, Image as ImageIcon, Copy, Check, FileSearch, Shield, Download } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -179,18 +179,64 @@ if(oSession.uriContains("https://wx.waimai.meituan.com/weapp/v1/poi/food")){
 
           {/* 底部说明 */}
           <div className="mt-12 space-y-6">
-            {/* 使用说明 */}
-            <Card className="bg-gradient-to-r from-orange-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 border-orange-200 dark:border-slate-700">
-              <CardContent className="py-6">
-                <div className="flex items-start justify-center space-x-3">
-                  <div className="text-2xl">💡</div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-gray-800 dark:text-white mb-2">使用说明</h3>
-                    <ul className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                      <li>• 支持本地文件实时监控,自动提取新增店铺和商品图片</li>
-                      <li>• 所有数据存储在浏览器本地,保护您的隐私安全</li>
-                      <li>• 支持批量下载图片到指定文件夹</li>
-                    </ul>
+            {/* 使用说明 - 重新设计 */}
+            <Card className="bg-white dark:bg-slate-900 border-2 border-orange-200 dark:border-slate-800 shadow-lg overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-slate-800 dark:to-slate-700 border-b border-orange-100 dark:border-slate-700">
+                <CardTitle className="text-2xl font-bold text-gray-800 dark:text-white flex items-center">
+                  <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-yellow-400 rounded-xl flex items-center justify-center mr-3 shadow-md">
+                    <span className="text-2xl">💡</span>
+                  </div>
+                  核心功能特性
+                </CardTitle>
+                <CardDescription className="text-gray-600 dark:text-gray-400 mt-2 ml-13">
+                  强大且易用的图片提取工具,为您提供一站式解决方案
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="py-8">
+                <div className="grid md:grid-cols-3 gap-6">
+                  {/* 功能卡片 1 */}
+                  <div className="group">
+                    <div className="bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-slate-800 dark:to-slate-700 rounded-xl p-6 h-full border-2 border-orange-100 dark:border-slate-600 hover:border-orange-300 dark:hover:border-orange-500 transition-all hover:shadow-lg">
+                      <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-yellow-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-md">
+                        <FileSearch className="w-6 h-6 text-white" />
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">
+                        实时文件监控
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                        支持本地文件实时监控,自动检测文件更新并提取新增店铺和商品图片
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 功能卡片 2 */}
+                  <div className="group">
+                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 rounded-xl p-6 h-full border-2 border-blue-100 dark:border-slate-600 hover:border-blue-300 dark:hover:border-blue-500 transition-all hover:shadow-lg">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-md">
+                        <Shield className="w-6 h-6 text-white" />
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">
+                        隐私安全保护
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                        所有数据存储在浏览器本地,无需上传服务器,完全保护您的隐私安全
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 功能卡片 3 */}
+                  <div className="group">
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-slate-800 dark:to-slate-700 rounded-xl p-6 h-full border-2 border-green-100 dark:border-slate-600 hover:border-green-300 dark:hover:border-green-500 transition-all hover:shadow-lg">
+                      <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-md">
+                        <Download className="w-6 h-6 text-white" />
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">
+                        批量下载功能
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                        支持批量下载图片到指定文件夹,自动命名,一键保存所有图片资源
+                      </p>
+                    </div>
                   </div>
                 </div>
               </CardContent>
