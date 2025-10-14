@@ -858,6 +858,31 @@ export default function Home() {
               {/* 商品信息监控 */}
               <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-slate-800 dark:to-slate-700 rounded-xl border-2 border-green-200 dark:border-slate-600">
                 <div className="text-sm font-semibold text-green-800 dark:text-green-200 mb-3">🛒 商品信息监控</div>
+
+                {/* 商品文件路径提示 */}
+                {!productFileHandle && (
+                  <div className="mb-3 p-3 bg-green-100 dark:bg-green-950 border-l-4 border-green-500 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <span className="text-lg">💡</span>
+                      <div className="flex-1 text-sm">
+                        <p className="font-semibold text-green-800 dark:text-green-200 mb-1">
+                          商品文件选择提示
+                        </p>
+                        <p className="text-green-700 dark:text-green-300">
+                          点击"选择商品文件"后,在弹出的对话框中:
+                        </p>
+                        <ol className="mt-2 space-y-1 text-green-700 dark:text-green-300 list-decimal list-inside">
+                          <li>在地址栏输入: <code className="px-2 py-0.5 bg-green-200 dark:bg-green-900 rounded font-mono text-xs">D:\ailun</code></li>
+                          <li>按 Enter 键快速跳转到该文件夹</li>
+                          <li>选择 <code className="px-2 py-0.5 bg-green-200 dark:bg-green-900 rounded font-mono text-xs">xiaochengxumeituan.txt</code> 文件</li>
+                          <li>文件会自动监控,商品图片会累积显示在页面底部</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     {!isMonitoringProduct ? (
