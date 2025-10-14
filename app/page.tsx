@@ -246,10 +246,19 @@ export default function Home() {
 
     try {
       const file = await fileHandle.getFile()
+      const currentModified = file.lastModified
 
-      if (file.lastModified > lastModified) {
-        addLog('检测到文件更新!', 'success')
-        setLastModified(file.lastModified)
+      // 添加调试日志
+      console.log('检查文件更新:', {
+        当前修改时间: new Date(currentModified).toLocaleString(),
+        上次修改时间: new Date(lastModified).toLocaleString(),
+        是否更新: currentModified > lastModified
+      })
+
+      if (currentModified > lastModified) {
+        addLog('🔄 检测到文件更新!', 'success')
+        addLog(`文件修改时间: ${new Date(currentModified).toLocaleString('zh-CN')}`, 'info')
+        setLastModified(currentModified)
 
         const content = await file.text()
         const data = JSON.parse(content)
