@@ -367,24 +367,88 @@ export default function Home() {
       return
     }
 
-    addLog('开始批量下载图片...', 'info')
-    const storeName = storeInfo.name.replace(/[<>:"/\\|?*]/g, '_')
+    try {
+      // 检查浏览器是否支持目录选择API
+      if (!('showDirectoryPicker' in window)) {
+        addLog('您的浏览器不支持文件夹选择功能', 'error')
+        addLog('请使用 Chrome 86+ 或 Edge 86+ 浏览器', 'warning')
+        return
+      }
 
-    if (storeInfo.avatarUrl) {
-      await downloadImage(storeInfo.avatarUrl, `${storeName}_头像.jpg`)
-    }
+      addLog('📁 请选择图片保存的文件夹...', 'info')
 
-    if (storeInfo.headerUrl) {
-      await downloadImage(storeInfo.headerUrl, `${storeName}_店招.jpg`)
-    }
+      // 让用户选择保存目录
+      const dirHandle = await (window as any).showDirectoryPicker({
+        mode: 'readwrite',
+        startIn: 'downloads', // 从下载文件夹开始
+      })
 
-    if (storeInfo.posterUrls) {
-      for (let i = 0; i < storeInfo.posterUrls.length; i++) {
-        await downloadImage(storeInfo.posterUrls[i], `${storeName}_海报${i + 1}.jpg`)
+      addLog(`✅ 已选择文件夹: ${dirHandle.name}`, 'success')
+      addLog('开始批量下载图片...', 'info')
+
+      const storeName = storeInfo.name.replace(/[<>:"/\\|?*]/g, '_')
+      let downloadCount = 0
+
+      // 下载头像
+      if (storeInfo.avatarUrl) {
+        const filename = `${storeName}_头像.jpg`
+        const success = await downloadImageToFolder(storeInfo.avatarUrl, filename, dirHandle)
+        if (success) downloadCount++
+      }
+
+      // 下载店招
+      if (storeInfo.headerUrl) {
+        const filename = `${storeName}_店招.jpg`
+        const success = await downloadImageToFolder(storeInfo.headerUrl, filename, dirHandle)
+        if (success) downloadCount++
+      }
+
+      // 下载海报
+      if (storeInfo.posterUrls) {
+        for (let i = 0; i < storeInfo.posterUrls.length; i++) {
+          const filename = `${storeName}_海报${i + 1}.jpg`
+          const success = await downloadImageToFolder(storeInfo.posterUrls[i], filename, dirHandle)
+          if (success) downloadCount++
+        }
+      }
+
+      addLog(`✅ 批量下载完成! 共保存 ${downloadCount} 张图片到文件夹: ${dirHandle.name}`, 'success')
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        addLog('❌ 已取消文件夹选择', 'warning')
+      } else {
+        addLog(`❌ 批量下载失败: ${error.message}`, 'error')
       }
     }
+  }
 
-    addLog('批量下载完成!', 'success')
+  // 下载图片到指定文件夹
+  const downloadImageToFolder = async (url: string, filename: string, dirHandle: any): Promise<boolean> => {
+    try {
+      addLog(`下载中: ${filename}`, 'info')
+
+      // 获取图片数据
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const blob = await response.blob()
+
+      // 在选定的文件夹中创建文件
+      const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
+      const writable = await fileHandle.createWritable()
+
+      // 写入文件
+      await writable.write(blob)
+      await writable.close()
+
+      addLog(`✅ 已保存: ${filename}`, 'success')
+      return true
+    } catch (error: any) {
+      addLog(`❌ 下载失败: ${filename} - ${error.message}`, 'error')
+      return false
+    }
   }
 
   const clearData = () => {
