@@ -882,23 +882,50 @@ export default function Home() {
 
   const downloadImage = async (url: string, filename: string) => {
     try {
-      addLog(`开始下载: ${filename}`, 'info')
+      addLog(`📥 开始下载: ${filename}`, 'info')
+      addLog(`🔗 图片URL: ${url}`, 'info')
+      console.log('🔍 下载详情:', { url, filename })
 
       // 使用 canvas 绕过 CORS
+      addLog(`⏳ 正在加载图片...`, 'info')
       const blob = await fetchImageAsBlob(url)
+      addLog(`✅ 图片加载成功, 大小: ${(blob.size / 1024).toFixed(2)} KB`, 'success')
+
       const blobUrl = window.URL.createObjectURL(blob)
+      addLog(`🔗 已创建Blob URL: ${blobUrl.substring(0, 50)}...`, 'info')
 
       const link = document.createElement('a')
       link.href = blobUrl
       link.download = filename
       document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
 
-      window.URL.revokeObjectURL(blobUrl)
-      addLog(`下载成功: ${filename}`, 'success')
+      addLog(`🖱️ 触发下载点击...`, 'info')
+      link.click()
+
+      // 延迟清理,确保下载开始
+      setTimeout(() => {
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(blobUrl)
+        addLog(`🧹 已清理临时资源`, 'info')
+      }, 100)
+
+      addLog(`✅ 下载成功: ${filename}`, 'success')
+      console.log('✅ 下载完成:', filename)
     } catch (error: any) {
-      addLog(`下载失败: ${filename} - ${error.message}`, 'error')
+      const errorMsg = `下载失败: ${filename} - ${error.message}`
+      addLog(`❌ ${errorMsg}`, 'error')
+      console.error('❌ 下载错误详情:', {
+        url,
+        filename,
+        error: error.message,
+        stack: error.stack
+      })
+
+      // 如果是CORS错误,给出更详细的提示
+      if (error.message.includes('CORS') || error.message.includes('cross-origin')) {
+        addLog(`💡 提示: 图片可能存在跨域限制`, 'warning')
+        addLog(`💡 建议: 尝试直接访问图片URL或使用代理`, 'warning')
+      }
     }
   }
 
@@ -1051,48 +1078,79 @@ export default function Home() {
   // 通过 canvas 获取图片 Blob (绕过 CORS)
   const fetchImageAsBlob = async (url: string): Promise<Blob> => {
     return new Promise((resolve, reject) => {
+      console.log('🎨 开始加载图片到canvas:', url)
       const img = new Image()
       img.crossOrigin = 'anonymous' // 尝试 CORS
 
       img.onload = () => {
         try {
+          console.log('✅ 图片加载完成:', {
+            naturalWidth: img.naturalWidth,
+            naturalHeight: img.naturalHeight,
+            complete: img.complete
+          })
+
           // 创建 canvas
           const canvas = document.createElement('canvas')
           canvas.width = img.naturalWidth
           canvas.height = img.naturalHeight
+          console.log('🎨 Canvas创建:', { width: canvas.width, height: canvas.height })
 
           const ctx = canvas.getContext('2d')
           if (!ctx) {
-            reject(new Error('无法创建 canvas context'))
+            const error = new Error('无法创建 canvas context')
+            console.error('❌ Canvas context创建失败')
+            reject(error)
             return
           }
 
           // 绘制图片
+          console.log('🖌️ 开始绘制图片到canvas...')
           ctx.drawImage(img, 0, 0)
+          console.log('✅ 图片绘制完成')
 
           // 转换为 Blob
+          console.log('🔄 开始转换为Blob...')
           canvas.toBlob(
             (blob) => {
               if (blob) {
+                console.log('✅ Blob转换成功:', {
+                  size: blob.size,
+                  type: blob.type
+                })
                 resolve(blob)
               } else {
-                reject(new Error('无法转换为 Blob'))
+                const error = new Error('无法转换为 Blob - toBlob返回null')
+                console.error('❌ Blob转换失败')
+                reject(error)
               }
             },
             'image/jpeg',
             0.95
           )
-        } catch (error) {
+        } catch (error: any) {
+          console.error('❌ Canvas处理错误:', {
+            message: error.message,
+            stack: error.stack
+          })
           reject(error)
         }
       }
 
-      img.onerror = () => {
-        reject(new Error('图片加载失败'))
+      img.onerror = (event) => {
+        const error = new Error(`图片加载失败 - 可能是URL无效或存在CORS限制`)
+        console.error('❌ 图片加载错误:', {
+          url,
+          event,
+          crossOrigin: img.crossOrigin
+        })
+        reject(error)
       }
 
       // 添加时间戳防止缓存问题
-      img.src = url.includes('?') ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`
+      const finalUrl = url.includes('?') ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`
+      console.log('🔗 设置图片src:', finalUrl)
+      img.src = finalUrl
     })
   }
 
