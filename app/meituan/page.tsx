@@ -219,29 +219,83 @@ export default function Home() {
     }
   }
 
+  // 检测是否在Tauri环境中运行
+  const isTauriEnvironment = () => {
+    return typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined
+  }
+
   // 选择要监控的文件
   const selectFileToMonitor = async () => {
     try {
-      // 检查浏览器是否支持 File System Access API
-      if (!('showOpenFilePicker' in window)) {
-        addLog('您的浏览器不支持文件系统访问API', 'error')
-        addLog('请使用 Chrome、Edge 或其他基于 Chromium 的浏览器', 'warning')
-        return
-      }
-
       addLog('📂 请在弹出的对话框中导航到 D:\\ailun 文件夹', 'info')
       addLog('📄 然后选择 sanjiantao.txt 文件', 'info')
 
-      // 打开文件选择对话框
-      const [handle] = await (window as any).showOpenFilePicker({
-        types: [
-          {
-            description: 'JSON 文件 (*.txt, *.json)',
-            accept: { 'application/json': ['.json', '.txt'] },
-          },
-        ],
-        startIn: 'desktop', // 从桌面开始(浏览器会记住上次的位置)
-      })
+      let handle: FileSystemFileHandle | null = null
+
+      if (isTauriEnvironment()) {
+        // Tauri环境:使用Tauri的原生对话框API
+        addLog('🖥️ 检测到Tauri环境,使用原生文件选择对话框', 'info')
+
+        const filePath = await (window as any).__TAURI__.core.invoke('plugin:dialog|open', {
+          options: {
+            multiple: false,
+            directory: false,
+            title: '选择监控文件',
+            filters: [{
+              name: 'JSON文件',
+              extensions: ['json', 'txt']
+            }]
+          }
+        })
+
+        if (!filePath) {
+          addLog('❌ 已取消文件选择', 'warning')
+          return
+        }
+
+        addLog(`✅ 已选择文件: ${filePath}`, 'success')
+
+        // 在Tauri环境中,我们需要使用文件路径而不是FileHandle
+        // 创建一个模拟的FileHandle对象
+        const tauriFileHandle = {
+          name: filePath.split('\\').pop() || filePath.split('/').pop() || 'unknown',
+          isTauri: true,
+          filePath: filePath,
+          async getFile() {
+            const content = await (window as any).__TAURI__.core.invoke('plugin:fs|read_text_file', {
+              path: filePath
+            })
+            return {
+              text: async () => content,
+              lastModified: Date.now()
+            }
+          }
+        } as any
+
+        handle = tauriFileHandle
+      } else {
+        // 浏览器环境:使用File System Access API
+        if (!('showOpenFilePicker' in window)) {
+          addLog('您的浏览器不支持文件系统访问API', 'error')
+          addLog('请使用 Chrome、Edge 或其他基于 Chromium 的浏览器', 'warning')
+          return
+        }
+
+        // 打开文件选择对话框
+        const [browserHandle] = await (window as any).showOpenFilePicker({
+          types: [
+            {
+              description: 'JSON 文件 (*.txt, *.json)',
+              accept: { 'application/json': ['.json', '.txt'] },
+            },
+          ],
+          startIn: 'desktop', // 从桌面开始(浏览器会记住上次的位置)
+        })
+
+        handle = browserHandle
+      }
+
+      if (!handle) return
 
       // 同时设置 state 和 ref
       setFileHandle(handle)
@@ -367,20 +421,66 @@ export default function Home() {
   // 选择商品监控文件
   const selectProductFileToMonitor = async () => {
     try {
-      if (!('showOpenFilePicker' in window)) {
-        addLog('您的浏览器不支持文件系统访问API', 'error')
-        return
-      }
-
       addLog('📂 请选择商品文件: xiaochengxumeituan.txt', 'info')
 
-      const [handle] = await (window as any).showOpenFilePicker({
-        types: [{
-          description: 'JSON 文件 (*.txt, *.json)',
-          accept: { 'application/json': ['.json', '.txt'] },
-        }],
-        startIn: 'desktop',
-      })
+      let handle: FileSystemFileHandle | null = null
+
+      if (isTauriEnvironment()) {
+        // Tauri环境
+        addLog('🖥️ 使用Tauri原生文件选择对话框', 'info')
+
+        const filePath = await (window as any).__TAURI__.core.invoke('plugin:dialog|open', {
+          options: {
+            multiple: false,
+            directory: false,
+            title: '选择商品文件',
+            filters: [{
+              name: 'JSON文件',
+              extensions: ['json', 'txt']
+            }]
+          }
+        })
+
+        if (!filePath) {
+          addLog('❌ 已取消商品文件选择', 'warning')
+          return
+        }
+
+        const tauriFileHandle = {
+          name: filePath.split('\\').pop() || filePath.split('/').pop() || 'unknown',
+          isTauri: true,
+          filePath: filePath,
+          async getFile() {
+            const content = await (window as any).__TAURI__.core.invoke('plugin:fs|read_text_file', {
+              path: filePath
+            })
+            return {
+              text: async () => content,
+              lastModified: Date.now()
+            }
+          }
+        } as any
+
+        handle = tauriFileHandle
+      } else {
+        // 浏览器环境
+        if (!('showOpenFilePicker' in window)) {
+          addLog('您的浏览器不支持文件系统访问API', 'error')
+          return
+        }
+
+        const [browserHandle] = await (window as any).showOpenFilePicker({
+          types: [{
+            description: 'JSON 文件 (*.txt, *.json)',
+            accept: { 'application/json': ['.json', '.txt'] },
+          }],
+          startIn: 'desktop',
+        })
+
+        handle = browserHandle
+      }
+
+      if (!handle) return
 
       setProductFileHandle(handle)
       productFileHandleRef.current = handle
@@ -527,20 +627,66 @@ export default function Home() {
   // 选择第二个商品监控文件
   const selectProductFile2ToMonitor = async () => {
     try {
-      if (!('showOpenFilePicker' in window)) {
-        addLog('您的浏览器不支持文件系统访问API', 'error')
-        return
-      }
-
       addLog('📂 请选择第二个商品文件: xiaochengxumeituan01.txt', 'info')
 
-      const [handle] = await (window as any).showOpenFilePicker({
-        types: [{
-          description: 'JSON 文件 (*.txt, *.json)',
-          accept: { 'application/json': ['.json', '.txt'] },
-        }],
-        startIn: 'desktop',
-      })
+      let handle: FileSystemFileHandle | null = null
+
+      if (isTauriEnvironment()) {
+        // Tauri环境
+        addLog('🖥️ 使用Tauri原生文件选择对话框', 'info')
+
+        const filePath = await (window as any).__TAURI__.core.invoke('plugin:dialog|open', {
+          options: {
+            multiple: false,
+            directory: false,
+            title: '选择第二个商品文件',
+            filters: [{
+              name: 'JSON文件',
+              extensions: ['json', 'txt']
+            }]
+          }
+        })
+
+        if (!filePath) {
+          addLog('❌ 已取消第二个商品文件选择', 'warning')
+          return
+        }
+
+        const tauriFileHandle = {
+          name: filePath.split('\\').pop() || filePath.split('/').pop() || 'unknown',
+          isTauri: true,
+          filePath: filePath,
+          async getFile() {
+            const content = await (window as any).__TAURI__.core.invoke('plugin:fs|read_text_file', {
+              path: filePath
+            })
+            return {
+              text: async () => content,
+              lastModified: Date.now()
+            }
+          }
+        } as any
+
+        handle = tauriFileHandle
+      } else {
+        // 浏览器环境
+        if (!('showOpenFilePicker' in window)) {
+          addLog('您的浏览器不支持文件系统访问API', 'error')
+          return
+        }
+
+        const [browserHandle] = await (window as any).showOpenFilePicker({
+          types: [{
+            description: 'JSON 文件 (*.txt, *.json)',
+            accept: { 'application/json': ['.json', '.txt'] },
+          }],
+          startIn: 'desktop',
+        })
+
+        handle = browserHandle
+      }
+
+      if (!handle) return
 
       setProductFileHandle2(handle)
       productFileHandleRef2.current = handle
@@ -666,7 +812,49 @@ export default function Home() {
     }
 
     try {
-      // 检查浏览器是否支持目录选择API
+      if (isTauriEnvironment()) {
+        // Tauri环境:使用原生下载功能,单独下载每个图片
+        addLog('🖥️ Tauri环境:将分别下载各个图片', 'info')
+
+        let downloadCount = 0
+        const storeName = storeInfo?.name.replace(/[<>:"/\\|?*]/g, '_') || '店铺'
+
+        // 下载店铺基本信息图片
+        if (storeInfo) {
+          if (storeInfo.avatarUrl) {
+            await downloadImage(storeInfo.avatarUrl, `${storeName}_头像.jpg`)
+            downloadCount++
+          }
+
+          if (storeInfo.headerUrl) {
+            await downloadImage(storeInfo.headerUrl, `${storeName}_店招.jpg`)
+            downloadCount++
+          }
+
+          if (storeInfo.posterUrls) {
+            for (let i = 0; i < storeInfo.posterUrls.length; i++) {
+              await downloadImage(storeInfo.posterUrls[i], `${storeName}_海报${i + 1}.jpg`)
+              downloadCount++
+            }
+          }
+        }
+
+        // 下载商品图片
+        if (productImages.length > 0) {
+          addLog(`开始下载 ${productImages.length} 个商品图片...`, 'info')
+
+          for (const product of productImages) {
+            const safeName = product.name.replace(/[<>:"/\\|?*]/g, '_')
+            await downloadImage(product.imageUrl, `${safeName}.jpg`)
+            downloadCount++
+          }
+        }
+
+        addLog(`✅ 批量下载完成! 共下载 ${downloadCount} 张图片`, 'success')
+        return
+      }
+
+      // 浏览器环境:使用目录选择API
       if (!('showDirectoryPicker' in window)) {
         addLog('您的浏览器不支持文件夹选择功能', 'error')
         addLog('请使用 Chrome 86+ 或 Edge 86+ 浏览器', 'warning')
