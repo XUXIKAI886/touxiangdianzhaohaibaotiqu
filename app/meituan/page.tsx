@@ -322,7 +322,18 @@ export default function Home() {
       setLastModified(initialModified)
       lastModifiedRef.current = initialModified
 
-      const content = await file.text()
+      let content: any = await file.text()
+
+      // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
+      if (typeof content !== 'string') {
+        if (content instanceof ArrayBuffer) {
+          const decoder = new TextDecoder('utf-8')
+          content = decoder.decode(content)
+        } else {
+          content = String(content)
+        }
+      }
+
       const data = JSON.parse(content)
       processJsonData(data)
 
@@ -379,7 +390,18 @@ export default function Home() {
         setLastModified(currentModified)
         lastModifiedRef.current = currentModified
 
-        const content = await file.text()
+        let content: any = await file.text()
+
+        // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
+        if (typeof content !== 'string') {
+          if (content instanceof ArrayBuffer) {
+            const decoder = new TextDecoder('utf-8')
+            content = decoder.decode(content)
+          } else {
+            content = String(content)
+          }
+        }
+
         const data = JSON.parse(content)
         processJsonData(data)
       }
@@ -516,7 +538,18 @@ export default function Home() {
       setLastProductModified(initialModified)
       lastProductModifiedRef.current = initialModified
 
-      const content = await file.text()
+      let content: any = await file.text()
+
+      // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
+      if (typeof content !== 'string') {
+        if (content instanceof ArrayBuffer) {
+          const decoder = new TextDecoder('utf-8')
+          content = decoder.decode(content)
+        } else {
+          content = String(content)
+        }
+      }
+
       const data = JSON.parse(content)
       processProductData(data)
 
@@ -560,7 +593,18 @@ export default function Home() {
         setLastProductModified(currentModified)
         lastProductModifiedRef.current = currentModified
 
-        const content = await file.text()
+        let content: any = await file.text()
+
+        // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
+        if (typeof content !== 'string') {
+          if (content instanceof ArrayBuffer) {
+            const decoder = new TextDecoder('utf-8')
+            content = decoder.decode(content)
+          } else {
+            content = String(content)
+          }
+        }
+
         const data = JSON.parse(content)
         processProductData(data)
       }
@@ -733,7 +777,18 @@ export default function Home() {
       setLastProductModified2(initialModified)
       lastProductModifiedRef2.current = initialModified
 
-      const content = await file.text()
+      let content: any = await file.text()
+
+      // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
+      if (typeof content !== 'string') {
+        if (content instanceof ArrayBuffer) {
+          const decoder = new TextDecoder('utf-8')
+          content = decoder.decode(content)
+        } else {
+          content = String(content)
+        }
+      }
+
       const data = JSON.parse(content)
       processProductData(data)
 
@@ -777,7 +832,18 @@ export default function Home() {
         setLastProductModified2(currentModified)
         lastProductModifiedRef2.current = currentModified
 
-        const content = await file.text()
+        let content: any = await file.text()
+
+        // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
+        if (typeof content !== 'string') {
+          if (content instanceof ArrayBuffer) {
+            const decoder = new TextDecoder('utf-8')
+            content = decoder.decode(content)
+          } else {
+            content = String(content)
+          }
+        }
+
         const data = JSON.parse(content)
         processProductData(data)
       }
