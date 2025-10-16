@@ -262,9 +262,22 @@ export default function Home() {
           isTauri: true,
           filePath: filePath,
           async getFile() {
-            const content = await (window as any).__TAURI__.core.invoke('plugin:fs|read_text_file', {
+            let content = await (window as any).__TAURI__.core.invoke('plugin:fs|read_text_file', {
               path: filePath
             })
+
+            // 确保内容是字符串
+            if (typeof content !== 'string') {
+              addLog(`⚠️ 文件内容类型: ${typeof content}`, 'warning')
+              if (content instanceof ArrayBuffer) {
+                // 将ArrayBuffer转换为字符串
+                const decoder = new TextDecoder('utf-8')
+                content = decoder.decode(content)
+              } else {
+                content = String(content)
+              }
+            }
+
             return {
               text: async () => content,
               lastModified: Date.now()
@@ -451,9 +464,20 @@ export default function Home() {
           isTauri: true,
           filePath: filePath,
           async getFile() {
-            const content = await (window as any).__TAURI__.core.invoke('plugin:fs|read_text_file', {
+            let content = await (window as any).__TAURI__.core.invoke('plugin:fs|read_text_file', {
               path: filePath
             })
+
+            // 确保内容是字符串
+            if (typeof content !== 'string') {
+              if (content instanceof ArrayBuffer) {
+                const decoder = new TextDecoder('utf-8')
+                content = decoder.decode(content)
+              } else {
+                content = String(content)
+              }
+            }
+
             return {
               text: async () => content,
               lastModified: Date.now()
@@ -657,9 +681,20 @@ export default function Home() {
           isTauri: true,
           filePath: filePath,
           async getFile() {
-            const content = await (window as any).__TAURI__.core.invoke('plugin:fs|read_text_file', {
+            let content = await (window as any).__TAURI__.core.invoke('plugin:fs|read_text_file', {
               path: filePath
             })
+
+            // 确保内容是字符串
+            if (typeof content !== 'string') {
+              if (content instanceof ArrayBuffer) {
+                const decoder = new TextDecoder('utf-8')
+                content = decoder.decode(content)
+              } else {
+                content = String(content)
+              }
+            }
+
             return {
               text: async () => content,
               lastModified: Date.now()
