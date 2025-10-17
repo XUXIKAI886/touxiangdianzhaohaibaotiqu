@@ -997,8 +997,25 @@ export default function Home() {
 
     try {
       if (isTauriEnvironment()) {
-        // Tauri环境:使用原生下载功能,单独下载每个图片
-        addLog('🖥️ Tauri环境:将分别下载各个图片', 'info')
+        // Tauri环境:先选择保存文件夹,然后批量保存
+        addLog('🖥️ Tauri环境:请选择保存文件夹', 'info')
+
+        // 使用Tauri的文件夹选择对话框
+        const folderPath = await (window as any).__TAURI__.core.invoke('plugin:dialog|open', {
+          options: {
+            multiple: false,
+            directory: true,  // 选择文件夹
+            title: '选择图片保存文件夹',
+          }
+        })
+
+        if (!folderPath) {
+          addLog('❌ 已取消文件夹选择', 'warning')
+          return
+        }
+
+        addLog(`✅ 已选择文件夹: ${folderPath}`, 'success')
+        addLog('开始批量下载图片...', 'info')
 
         let downloadCount = 0
         const storeName = storeInfo?.name.replace(/[<>:"/\\|?*]/g, '_') || '店铺'
@@ -1006,19 +1023,22 @@ export default function Home() {
         // 下载店铺基本信息图片
         if (storeInfo) {
           if (storeInfo.avatarUrl) {
-            await downloadImage(storeInfo.avatarUrl, `${storeName}_头像.jpg`)
-            downloadCount++
+            const filename = `${storeName}_头像.jpg`
+            const success = await downloadImageToFolderTauri(storeInfo.avatarUrl, filename, folderPath)
+            if (success) downloadCount++
           }
 
           if (storeInfo.headerUrl) {
-            await downloadImage(storeInfo.headerUrl, `${storeName}_店招.jpg`)
-            downloadCount++
+            const filename = `${storeName}_店招.jpg`
+            const success = await downloadImageToFolderTauri(storeInfo.headerUrl, filename, folderPath)
+            if (success) downloadCount++
           }
 
           if (storeInfo.posterUrls) {
             for (let i = 0; i < storeInfo.posterUrls.length; i++) {
-              await downloadImage(storeInfo.posterUrls[i], `${storeName}_海报${i + 1}.jpg`)
-              downloadCount++
+              const filename = `${storeName}_海报${i + 1}.jpg`
+              const success = await downloadImageToFolderTauri(storeInfo.posterUrls[i], filename, folderPath)
+              if (success) downloadCount++
             }
           }
         }
@@ -1029,12 +1049,13 @@ export default function Home() {
 
           for (const product of productImages) {
             const safeName = product.name.replace(/[<>:"/\\|?*]/g, '_')
-            await downloadImage(product.imageUrl, `${safeName}.jpg`)
-            downloadCount++
+            const filename = `${safeName}.jpg`
+            const success = await downloadImageToFolderTauri(product.imageUrl, filename, folderPath)
+            if (success) downloadCount++
           }
         }
 
-        addLog(`✅ 批量下载完成! 共下载 ${downloadCount} 张图片`, 'success')
+        addLog(`✅ 批量下载完成! 共保存 ${downloadCount} 张图片到: ${folderPath}`, 'success')
         return
       }
 
@@ -1107,7 +1128,43 @@ export default function Home() {
     }
   }
 
-  // 下载图片到指定文件夹
+  // Tauri环境:下载图片到指定文件夹
+  const downloadImageToFolderTauri = async (url: string, filename: string, folderPath: string): Promise<boolean> => {
+    try {
+      addLog(`下载中: ${filename}`, 'info')
+
+      // 使用 canvas 绕过 CORS 限制
+      const blob = await fetchImageAsBlob(url)
+
+      // 构建完整文件路径
+      const fullPath = `${folderPath}\\${filename}`
+
+      // 将Blob转换为Uint8Array
+      const arrayBuffer = await blob.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
+
+      // 使用 Tauri 2.x 的正确 3 参数格式保存文件
+      await (window as any).__TAURI__.core.invoke(
+        'plugin:fs|write_file',
+        uint8Array,
+        {
+          headers: {
+            path: encodeURIComponent(fullPath),
+            options: JSON.stringify({})
+          }
+        }
+      )
+
+      addLog(`✅ 已保存: ${filename}`, 'success')
+      return true
+    } catch (error: any) {
+      addLog(`❌ 下载失败: ${filename} - ${error.message}`, 'error')
+      console.error('Tauri批量下载错误:', error)
+      return false
+    }
+  }
+
+  // 浏览器环境:下载图片到指定文件夹
   const downloadImageToFolder = async (url: string, filename: string, dirHandle: any): Promise<boolean> => {
     try {
       addLog(`下载中: ${filename}`, 'info')
