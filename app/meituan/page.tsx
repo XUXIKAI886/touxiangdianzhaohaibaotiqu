@@ -920,15 +920,21 @@ export default function Home() {
           const arrayBuffer = await blob.arrayBuffer()
           const uint8Array = new Uint8Array(arrayBuffer)
 
-          // 使用Tauri的fs API保存文件
+          // 使用Tauri的fs API保存文件 (3参数格式)
           addLog(`💾 正在写入文件...`, 'info')
           console.log('🔧 准备写入文件:', { path: savePath, size: uint8Array.length })
 
-          // 使用 Tauri 2.0 的 writeBinaryFile API
-          await (window as any).__TAURI__.core.invoke('plugin:fs|write_binary_file', {
-            path: savePath,
-            contents: Array.from(uint8Array)
-          })
+          // 使用 Tauri 2.x 的正确 3 参数格式
+          await (window as any).__TAURI__.core.invoke(
+            'plugin:fs|write_file',    // 第1个参数: 命令名
+            uint8Array,                 // 第2个参数: Uint8Array 数据
+            {                           // 第3个参数: 配置对象
+              headers: {
+                path: encodeURIComponent(savePath),
+                options: JSON.stringify({})
+              }
+            }
+          )
 
           addLog(`✅ 文件保存成功: ${savePath}`, 'success')
           console.log('✅ Tauri下载完成:', savePath)
