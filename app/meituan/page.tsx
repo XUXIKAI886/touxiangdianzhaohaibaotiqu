@@ -922,7 +922,10 @@ export default function Home() {
 
           // 使用Tauri的fs API保存文件
           addLog(`💾 正在写入文件...`, 'info')
-          await (window as any).__TAURI__.core.invoke('plugin:fs|write_file', {
+          console.log('🔧 准备写入文件:', { path: savePath, size: uint8Array.length })
+
+          // 使用 Tauri 2.0 的 writeBinaryFile API
+          await (window as any).__TAURI__.core.invoke('plugin:fs|write_binary_file', {
             path: savePath,
             contents: Array.from(uint8Array)
           })
