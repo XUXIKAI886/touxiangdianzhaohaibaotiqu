@@ -884,33 +884,80 @@ export default function Home() {
     try {
       addLog(`📥 开始下载: ${filename}`, 'info')
       addLog(`🔗 图片URL: ${url}`, 'info')
-      console.log('🔍 下载详情:', { url, filename })
+      console.log('🔍 下载详情:', { url, filename, isTauri: isTauriEnvironment() })
 
       // 使用 canvas 绕过 CORS
       addLog(`⏳ 正在加载图片...`, 'info')
       const blob = await fetchImageAsBlob(url)
       addLog(`✅ 图片加载成功, 大小: ${(blob.size / 1024).toFixed(2)} KB`, 'success')
 
-      const blobUrl = window.URL.createObjectURL(blob)
-      addLog(`🔗 已创建Blob URL: ${blobUrl.substring(0, 50)}...`, 'info')
+      if (isTauriEnvironment()) {
+        // Tauri环境: 使用原生文件保存对话框
+        addLog(`🖥️ 检测到Tauri环境, 使用原生保存对话框`, 'info')
 
-      const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = filename
-      document.body.appendChild(link)
+        try {
+          // 弹出保存对话框让用户选择保存位置
+          const savePath = await (window as any).__TAURI__.core.invoke('plugin:dialog|save', {
+            options: {
+              defaultPath: filename,
+              title: '保存图片',
+              filters: [{
+                name: '图片文件',
+                extensions: ['jpg', 'jpeg', 'png']
+              }]
+            }
+          })
 
-      addLog(`🖱️ 触发下载点击...`, 'info')
-      link.click()
+          if (!savePath) {
+            addLog(`❌ 用户取消了保存`, 'warning')
+            return
+          }
 
-      // 延迟清理,确保下载开始
-      setTimeout(() => {
-        document.body.removeChild(link)
-        window.URL.revokeObjectURL(blobUrl)
-        addLog(`🧹 已清理临时资源`, 'info')
-      }, 100)
+          addLog(`📁 保存路径: ${savePath}`, 'info')
 
-      addLog(`✅ 下载成功: ${filename}`, 'success')
-      console.log('✅ 下载完成:', filename)
+          // 将Blob转换为ArrayBuffer
+          addLog(`🔄 正在转换图片格式...`, 'info')
+          const arrayBuffer = await blob.arrayBuffer()
+          const uint8Array = new Uint8Array(arrayBuffer)
+
+          // 使用Tauri的fs API保存文件
+          addLog(`💾 正在写入文件...`, 'info')
+          await (window as any).__TAURI__.core.invoke('plugin:fs|write_file', {
+            path: savePath,
+            contents: Array.from(uint8Array)
+          })
+
+          addLog(`✅ 文件保存成功: ${savePath}`, 'success')
+          console.log('✅ Tauri下载完成:', savePath)
+        } catch (tauriError: any) {
+          addLog(`❌ Tauri保存失败: ${tauriError.message}`, 'error')
+          console.error('❌ Tauri保存错误:', tauriError)
+        }
+      } else {
+        // 浏览器环境: 使用传统的<a>标签下载
+        addLog(`🌐 浏览器环境, 使用传统下载方式`, 'info')
+
+        const blobUrl = window.URL.createObjectURL(blob)
+        addLog(`🔗 已创建Blob URL: ${blobUrl.substring(0, 50)}...`, 'info')
+
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = filename
+        document.body.appendChild(link)
+
+        addLog(`🖱️ 触发下载点击...`, 'info')
+        link.click()
+
+        // 延迟清理,确保下载开始
+        setTimeout(() => {
+          document.body.removeChild(link)
+          window.URL.revokeObjectURL(blobUrl)
+          addLog(`🧹 已清理临时资源`, 'info')
+        }, 100)
+
+        addLog(`✅ 下载成功: ${filename}`, 'success')
+        console.log('✅ 浏览器下载完成:', filename)
+      }
     } catch (error: any) {
       const errorMsg = `下载失败: ${filename} - ${error.message}`
       addLog(`❌ ${errorMsg}`, 'error')
