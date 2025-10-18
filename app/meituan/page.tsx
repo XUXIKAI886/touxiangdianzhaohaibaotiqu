@@ -48,6 +48,8 @@ export default function Home() {
   // 使用 ref 存储 fileHandle,避免闭包问题
   const fileHandleRef = useRef<FileSystemFileHandle | null>(null)
   const lastModifiedRef = useRef<number>(0)
+  // 控制是否应该处理文件更新的标志
+  const shouldProcessUpdateRef = useRef<boolean>(false)
 
   // 商品监控相关状态
   const [isMonitoringProduct, setIsMonitoringProduct] = useState(false)
@@ -322,20 +324,11 @@ export default function Home() {
       setLastModified(initialModified)
       lastModifiedRef.current = initialModified
 
-      let content: any = await file.text()
-
-      // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
-      if (typeof content !== 'string') {
-        if (content instanceof ArrayBuffer) {
-          const decoder = new TextDecoder('utf-8')
-          content = decoder.decode(content)
-        } else {
-          content = String(content)
-        }
-      }
-
-      const data = JSON.parse(content)
-      processJsonData(data)
+      // 首次选择文件时，不提取数据，只开始监控
+      // 将标志设置为 true，等待文件更新时才提取
+      shouldProcessUpdateRef.current = true
+      addLog('✅ 文件选择成功，等待文件更新...', 'success')
+      addLog('💡 当JSON文件内容发生变化时，将自动提取图片', 'info')
 
       // 自动开始监控
       addLog('🚀 自动开始监控文件变化...', 'success')
@@ -390,20 +383,30 @@ export default function Home() {
         setLastModified(currentModified)
         lastModifiedRef.current = currentModified
 
-        let content: any = await file.text()
+        // 检查是否应该处理文件更新
+        if (shouldProcessUpdateRef.current) {
+          addLog('📥 开始提取图片数据...', 'info')
 
-        // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
-        if (typeof content !== 'string') {
-          if (content instanceof ArrayBuffer) {
-            const decoder = new TextDecoder('utf-8')
-            content = decoder.decode(content)
-          } else {
-            content = String(content)
+          let content: any = await file.text()
+
+          // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
+          if (typeof content !== 'string') {
+            if (content instanceof ArrayBuffer) {
+              const decoder = new TextDecoder('utf-8')
+              content = decoder.decode(content)
+            } else {
+              content = String(content)
+            }
           }
-        }
 
-        const data = JSON.parse(content)
-        processJsonData(data)
+          const data = JSON.parse(content)
+          processJsonData(data)
+        } else {
+          addLog('⏸️ 文件已更新，但当前不提取数据（已清空状态）', 'warning')
+          addLog('💡 下次文件更新时将自动提取', 'info')
+          // 下次文件更新时提取
+          shouldProcessUpdateRef.current = true
+        }
       }
     } catch (error: any) {
       addLog(`读取文件失败: ${error.message}`, 'error')
@@ -1274,7 +1277,12 @@ export default function Home() {
       setAvatarLoaded(false)
       setHeaderLoaded(false)
       setPosterLoaded(false)
+
+      // 清空后，停止自动提取数据，直到下次文件更新
+      shouldProcessUpdateRef.current = false
+
       addLog('数据已清空', 'warning')
+      addLog('💡 监控继续运行，下次文件更新时将自动提取', 'info')
     }
   }
 
