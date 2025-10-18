@@ -76,6 +76,10 @@ export default function Home() {
 
   // 从本地存储加载数据
   useEffect(() => {
+    // 版本标识 - 用于确认是否加载了新版本
+    console.log('🎯🎯🎯 页面版本: v2.0 - 内容哈希检测版本 🎯🎯🎯')
+    console.log('✅ 如果看到这条消息，说明已加载新版本代码')
+
     const savedData = localStorage.getItem(STORAGE_KEY)
     const savedHistory = localStorage.getItem(HISTORY_KEY)
 
@@ -1400,9 +1404,14 @@ export default function Home() {
         {/* Control Panel */}
         <Card className="mb-6 bg-white dark:bg-slate-900 border-orange-200 dark:border-slate-800 shadow-lg">
           <CardHeader>
-            <CardTitle className="text-xl font-bold text-gray-800 dark:text-white">控制面板</CardTitle>
+            <CardTitle className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+              控制面板
+              <Badge variant="outline" className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-300 dark:border-green-700">
+                v2.0-内容哈希检测
+              </Badge>
+            </CardTitle>
             <CardDescription className="text-gray-600 dark:text-gray-400">
-              选择要监控的文件,系统将自动检测文件变化并提取店铺图片
+              选择要监控的文件,系统将自动检测文件内容变化并提取店铺图片
             </CardDescription>
           </CardHeader>
           <CardContent>
