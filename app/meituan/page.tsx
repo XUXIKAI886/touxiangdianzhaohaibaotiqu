@@ -126,6 +126,8 @@ export default function Home() {
 
   // 解析JSON数据
   const processJsonData = (data: any) => {
+    console.log('📥 processJsonData 被调用, shouldProcessUpdateRef:', shouldProcessUpdateRef.current)
+    console.trace('调用堆栈')
     try {
       // 清空旧图片
       setAvatarLoaded(false)
@@ -360,7 +362,7 @@ export default function Home() {
     const handle = fileHandleRef.current
     const lastMod = lastModifiedRef.current
 
-    console.log('🔍 执行 checkFileUpdate, fileHandle:', !!handle, 'lastModified:', lastMod)
+    console.log('🔍 执行 checkFileUpdate, fileHandle:', !!handle, 'lastModified:', lastMod, 'shouldProcess:', shouldProcessUpdateRef.current)
 
     if (!handle) {
       console.log('⚠️ fileHandleRef 为空,跳过检查')
@@ -1290,6 +1292,7 @@ export default function Home() {
 
       // 清空后，停止自动提取数据，直到下次文件更新
       shouldProcessUpdateRef.current = false
+      console.log('🚫 clearData: 已设置 shouldProcessUpdateRef =', shouldProcessUpdateRef.current)
 
       addLog('数据已清空', 'warning')
       addLog('💡 监控继续运行，下次文件更新时将自动提取', 'info')
