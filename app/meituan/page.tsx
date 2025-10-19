@@ -63,6 +63,8 @@ export default function Home() {
   const productMonitorIntervalRef = useRef<NodeJS.Timeout | null>(null)
   // 控制商品1是否应该处理文件更新的标志
   const shouldProcessProductUpdateRef = useRef<boolean>(false)
+  // 保存商品文件上次内容哈希
+  const lastProductContentHashRef = useRef<string>('')
 
   // 第二个商品监控相关状态
   const [isMonitoringProduct2, setIsMonitoringProduct2] = useState(false)
@@ -73,6 +75,8 @@ export default function Home() {
   const productMonitorIntervalRef2 = useRef<NodeJS.Timeout | null>(null)
   // 控制商品2是否应该处理文件更新的标志
   const shouldProcessProduct2UpdateRef = useRef<boolean>(false)
+  // 保存第二个商品文件上次内容哈希
+  const lastProductContentHashRef2 = useRef<string>('')
 
   // 从本地存储加载数据
   useEffect(() => {
@@ -598,6 +602,20 @@ export default function Home() {
       setLastProductModified(initialModified)
       lastProductModifiedRef.current = initialModified
 
+      // 计算初始内容哈希，避免首次就重复提取
+      let initialContent: any = await file.text()
+      if (typeof initialContent !== 'string') {
+        if (initialContent instanceof ArrayBuffer) {
+          const decoder = new TextDecoder('utf-8')
+          initialContent = decoder.decode(initialContent)
+        } else {
+          initialContent = String(initialContent)
+        }
+      }
+      const initialHash = hashString(initialContent)
+      lastProductContentHashRef.current = initialHash
+      console.log('📌 商品文件初始内容哈希:', initialHash)
+
       // 首次选择文件时，不提取数据，只开始监控
       shouldProcessProductUpdateRef.current = true
       addLog('✅ 商品文件选择成功，等待文件更新...', 'success')
@@ -638,34 +656,47 @@ export default function Home() {
       })
 
       if (currentModified > lastMod) {
-        addLog('🔄 检测到商品文件更新!', 'success')
-
         setLastProductModified(currentModified)
         lastProductModifiedRef.current = currentModified
 
-        // 检查是否应该处理文件更新
-        if (shouldProcessProductUpdateRef.current) {
-          addLog('📥 开始提取商品图片数据...', 'info')
+        let content: any = await file.text()
 
-          let content: any = await file.text()
-
-          // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
-          if (typeof content !== 'string') {
-            if (content instanceof ArrayBuffer) {
-              const decoder = new TextDecoder('utf-8')
-              content = decoder.decode(content)
-            } else {
-              content = String(content)
-            }
+        // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
+        if (typeof content !== 'string') {
+          if (content instanceof ArrayBuffer) {
+            const decoder = new TextDecoder('utf-8')
+            content = decoder.decode(content)
+          } else {
+            content = String(content)
           }
+        }
 
-          const data = JSON.parse(content)
-          processProductData(data)
+        const contentHash = hashString(content)
+        const lastHash = lastProductContentHashRef.current
+
+        console.log('🔍 商品文件内容哈希检查:', {
+          当前哈希: contentHash,
+          上次哈希: lastHash,
+          内容是否变化: contentHash !== lastHash
+        })
+
+        if (contentHash !== lastHash) {
+          addLog('🔄 检测到商品文件内容变化!', 'success')
+          lastProductContentHashRef.current = contentHash
+
+          if (shouldProcessProductUpdateRef.current) {
+            addLog('📥 开始提取商品图片数据...', 'info')
+
+            const data = JSON.parse(content)
+            processProductData(data)
+          } else {
+            addLog('⏸️ 商品文件内容已变化，但当前不提取数据（已清空状态）', 'warning')
+            addLog('💡 下次商品文件内容变化时将自动提取', 'info')
+            // 下次文件内容变化时提取
+            shouldProcessProductUpdateRef.current = true
+          }
         } else {
-          addLog('⏸️ 商品文件已更新，但当前不提取数据（已清空状态）', 'warning')
-          addLog('💡 下次商品文件更新时将自动提取', 'info')
-          // 下次文件更新时提取
-          shouldProcessProductUpdateRef.current = true
+          console.log('⏭️ 商品文件修改时间变化但内容未变，跳过处理')
         }
       }
     } catch (error: any) {
@@ -837,6 +868,20 @@ export default function Home() {
       setLastProductModified2(initialModified)
       lastProductModifiedRef2.current = initialModified
 
+      // 计算第二个商品文件的初始内容哈希
+      let initialContent: any = await file.text()
+      if (typeof initialContent !== 'string') {
+        if (initialContent instanceof ArrayBuffer) {
+          const decoder = new TextDecoder('utf-8')
+          initialContent = decoder.decode(initialContent)
+        } else {
+          initialContent = String(initialContent)
+        }
+      }
+      const initialHash = hashString(initialContent)
+      lastProductContentHashRef2.current = initialHash
+      console.log('📌 第二个商品文件初始内容哈希:', initialHash)
+
       // 首次选择文件时，不提取数据，只开始监控
       shouldProcessProduct2UpdateRef.current = true
       addLog('✅ 第二个商品文件选择成功，等待文件更新...', 'success')
@@ -877,34 +922,47 @@ export default function Home() {
       })
 
       if (currentModified > lastMod) {
-        addLog('🔄 检测到第二个商品文件更新!', 'success')
-
         setLastProductModified2(currentModified)
         lastProductModifiedRef2.current = currentModified
 
-        // 检查是否应该处理文件更新
-        if (shouldProcessProduct2UpdateRef.current) {
-          addLog('📥 开始提取第二个商品文件的图片数据...', 'info')
+        let content: any = await file.text()
 
-          let content: any = await file.text()
-
-          // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
-          if (typeof content !== 'string') {
-            if (content instanceof ArrayBuffer) {
-              const decoder = new TextDecoder('utf-8')
-              content = decoder.decode(content)
-            } else {
-              content = String(content)
-            }
+        // 如果是Tauri环境且返回的是ArrayBuffer,需要转换
+        if (typeof content !== 'string') {
+          if (content instanceof ArrayBuffer) {
+            const decoder = new TextDecoder('utf-8')
+            content = decoder.decode(content)
+          } else {
+            content = String(content)
           }
+        }
 
-          const data = JSON.parse(content)
-          processProductData(data)
+        const contentHash = hashString(content)
+        const lastHash = lastProductContentHashRef2.current
+
+        console.log('🔍 第二个商品文件内容哈希检查:', {
+          当前哈希: contentHash,
+          上次哈希: lastHash,
+          内容是否变化: contentHash !== lastHash
+        })
+
+        if (contentHash !== lastHash) {
+          addLog('🔄 检测到第二个商品文件内容变化!', 'success')
+          lastProductContentHashRef2.current = contentHash
+
+          if (shouldProcessProduct2UpdateRef.current) {
+            addLog('📥 开始提取第二个商品文件的图片数据...', 'info')
+
+            const data = JSON.parse(content)
+            processProductData(data)
+          } else {
+            addLog('⏸️ 第二个商品文件内容已变化，但当前不提取数据（已清空状态）', 'warning')
+            addLog('💡 下次商品文件内容变化时将自动提取', 'info')
+            // 下次文件内容变化时提取
+            shouldProcessProduct2UpdateRef.current = true
+          }
         } else {
-          addLog('⏸️ 第二个商品文件已更新，但当前不提取数据（已清空状态）', 'warning')
-          addLog('💡 下次商品文件更新时将自动提取', 'info')
-          // 下次文件更新时提取
-          shouldProcessProduct2UpdateRef.current = true
+          console.log('⏭️ 第二个商品文件修改时间变化但内容未变，跳过处理')
         }
       }
     } catch (error: any) {
@@ -933,7 +991,7 @@ export default function Home() {
       shouldProcessProduct2UpdateRef.current = false
 
       addLog('商品数据已清空', 'warning')
-      addLog('💡 商品监控继续运行，下次文件更新时将自动提取', 'info')
+      addLog('💡 商品监控继续运行，下次文件内容变化时将自动提取', 'info')
     }
   }
 

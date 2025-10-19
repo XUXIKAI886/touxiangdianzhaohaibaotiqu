@@ -30,6 +30,8 @@ export default function ElemePage() {
   const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const fileHandleRef = useRef<FileSystemFileHandle | null>(null)
   const lastModifiedRef = useRef<number>(0)
+  const shouldProcessUpdateRef = useRef<boolean>(false)
+  const lastContentHashRef = useRef<string>('')
 
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
@@ -76,6 +78,16 @@ export default function ElemePage() {
     // jpg和jpeg都统一为jpg
 
     return `https://cube.elemecdn.com/${dir1}/${dir2}/${filename}.${extension}`
+  }
+
+  const hashString = (str: string): string => {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash
+    }
+    return hash.toString()
   }
 
   // 解析饿了么商品数据
@@ -186,7 +198,21 @@ export default function ElemePage() {
       setLastModified(initialModified)
       lastModifiedRef.current = initialModified
 
-      const content = await file.text()
+      let content: any = await file.text()
+      if (typeof content !== 'string') {
+        if (content instanceof ArrayBuffer) {
+          const decoder = new TextDecoder('utf-8')
+          content = decoder.decode(content)
+        } else {
+          content = String(content)
+        }
+      }
+
+      const initialHash = hashString(content)
+      lastContentHashRef.current = initialHash
+      shouldProcessUpdateRef.current = true
+      console.log('📌 饿了么文件初始内容哈希:', initialHash)
+
       const data = JSON.parse(content)
       processElemeProductData(data)
 
@@ -220,15 +246,46 @@ export default function ElemePage() {
       const currentModified = file.lastModified
 
       if (currentModified > lastMod) {
-        addLog('🔄 检测到文件更新!', 'success')
-        addLog(`文件修改时间: ${new Date(currentModified).toLocaleString('zh-CN')}`, 'info')
-
         setLastModified(currentModified)
         lastModifiedRef.current = currentModified
 
-        const content = await file.text()
-        const data = JSON.parse(content)
-        processElemeProductData(data)
+        let content: any = await file.text()
+        if (typeof content !== 'string') {
+          if (content instanceof ArrayBuffer) {
+            const decoder = new TextDecoder('utf-8')
+            content = decoder.decode(content)
+          } else {
+            content = String(content)
+          }
+        }
+
+        const contentHash = hashString(content)
+        const lastHash = lastContentHashRef.current
+
+        console.log('🔍 饿了么文件内容哈希检查:', {
+          当前哈希: contentHash,
+          上次哈希: lastHash,
+          内容是否变化: contentHash !== lastHash
+        })
+
+        if (contentHash !== lastHash) {
+          addLog('🔄 检测到文件内容变化!', 'success')
+          addLog(`文件修改时间: ${new Date(currentModified).toLocaleString('zh-CN')}`, 'info')
+
+          lastContentHashRef.current = contentHash
+
+          if (shouldProcessUpdateRef.current) {
+            addLog('📥 开始提取饿了么商品数据...', 'info')
+            const data = JSON.parse(content)
+            processElemeProductData(data)
+          } else {
+            addLog('⏸️ 文件内容已变化，但当前不提取数据（已清空状态）', 'warning')
+            addLog('💡 下次文件内容变化时将自动提取', 'info')
+            shouldProcessUpdateRef.current = true
+          }
+        } else {
+          console.log('⏭️ 饿了么文件修改时间变化但内容未变，跳过处理')
+        }
       }
     } catch (error: any) {
       addLog(`读取文件失败: ${error.message}`, 'error')
@@ -259,7 +316,10 @@ export default function ElemePage() {
   const clearProductData = () => {
     if (confirm('确定要清空所有商品图片吗?')) {
       setProductImages([])
+      shouldProcessUpdateRef.current = false
+
       addLog('商品数据已清空', 'warning')
+      addLog('💡 监控继续运行，下次文件内容变化时将自动提取', 'info')
     }
   }
 
