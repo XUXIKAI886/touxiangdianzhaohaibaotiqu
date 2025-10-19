@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Play, Square, Image as ImageIcon, Store, Download, Upload, Trash2, Home as HomeIcon } from 'lucide-react'
+import { Play, Square, Image as ImageIcon, Store, Download, Upload, Trash2, Home as HomeIcon, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -77,6 +77,9 @@ export default function Home() {
   const shouldProcessProduct2UpdateRef = useRef<boolean>(false)
   // 保存第二个商品文件上次内容哈希
   const lastProductContentHashRef2 = useRef<string>('')
+  // 店铺名称复制状态
+  const [copiedStoreKey, setCopiedStoreKey] = useState<string | null>(null)
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 从本地存储加载数据
   useEffect(() => {
@@ -109,9 +112,50 @@ export default function Home() {
     }
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
+
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     setLogs(prev => [...prev, { timestamp, message, type }])
+  }
+
+  const copyStoreName = async (name: string, key: string) => {
+    if (!name) return
+
+    try {
+      if ((window as any).__TAURI__?.clipboard?.writeText) {
+        await (window as any).__TAURI__.clipboard.writeText(name)
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(name)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = name
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+
+      setCopiedStoreKey(key)
+      addLog(`✅ 店铺名称已复制: ${name}`, 'success')
+      copyTimeoutRef.current = setTimeout(() => setCopiedStoreKey(null), 2000)
+    } catch (error) {
+      console.error('复制店铺名称失败:', error)
+      addLog('❌ 店铺名称复制失败，请手动复制', 'error')
+    }
   }
 
   const scrollToBottom = () => {
@@ -1734,9 +1778,27 @@ export default function Home() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-gray-700 dark:text-gray-300">
-                <div className="flex items-start">
+                <div className="flex items-start gap-2">
                   <span className="text-gray-500 dark:text-gray-400 font-medium min-w-[80px]">店铺名称:</span>
-                  <span className="flex-1 font-semibold">{storeInfo?.name || '等待上传数据...'}</span>
+                  {storeInfo?.name ? (
+                    <button
+                      type="button"
+                      onClick={() => copyStoreName(storeInfo.name, 'current')}
+                      className="group flex-1 flex items-center gap-2 text-left font-semibold text-gray-800 dark:text-gray-100 hover:text-orange-600 dark:hover:text-orange-300 transition-colors"
+                    >
+                      <span className="break-all">{storeInfo.name}</span>
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 dark:text-orange-300 bg-orange-100/70 dark:bg-orange-900/40 px-2 py-0.5 rounded-full border border-orange-200/80 dark:border-orange-800/60">
+                        {copiedStoreKey === 'current' ? (
+                          <Check className="w-3.5 h-3.5" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        {copiedStoreKey === 'current' ? '已复制' : '复制'}
+                      </span>
+                    </button>
+                  ) : (
+                    <span className="flex-1 font-semibold">等待上传数据...</span>
+                  )}
                 </div>
                 <div className="flex items-start">
                   <span className="text-gray-500 dark:text-gray-400 font-medium min-w-[80px]">店铺ID:</span>
@@ -1773,7 +1835,25 @@ export default function Home() {
                         onClick={() => loadHistoryItem(item)}
                         className="p-3 bg-orange-50/50 dark:bg-slate-800/50 rounded-lg cursor-pointer hover:bg-orange-100 dark:hover:bg-slate-700 transition-colors"
                       >
-                        <div className="font-semibold text-sm text-gray-800 dark:text-white">{item.name}</div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-sm text-gray-800 dark:text-white break-all pr-1">{item.name}</span>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              copyStoreName(item.name, `history-${item.id}`)
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 dark:text-orange-300 bg-orange-100/70 dark:bg-orange-900/40 px-2 py-0.5 rounded-full border border-orange-200/80 dark:border-orange-800/60 hover:bg-orange-200/70 dark:hover:bg-orange-900/70 transition-colors"
+                            title="复制店铺名称"
+                          >
+                            {copiedStoreKey === `history-${item.id}` ? (
+                              <Check className="w-3 h-3" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                            {copiedStoreKey === `history-${item.id}` ? '已复制' : '复制'}
+                          </button>
+                        </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           ID: {item.id} • {item.updateTime}
                         </div>
